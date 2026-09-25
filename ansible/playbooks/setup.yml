@@ -1,0 +1,20 @@
+---
+# ==============================================================================
+# Setup Playbook - OS configuration only (no k3s)
+# ==============================================================================
+# Usage:
+#   ansible-playbook playbooks/setup.yml
+# ==============================================================================
+
+- name: Configure base OS, security, and NFS
+  hosts: k3s_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: common
+      tags: [common]
+    - role: security
+      tags: [security]
+    - role: nfs
+      tags: [nfs]

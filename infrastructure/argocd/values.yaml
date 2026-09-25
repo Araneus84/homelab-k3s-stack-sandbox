@@ -1,0 +1,79 @@
+# NOTE: This file is consumed by the upstream `argo/argo-cd` Helm chart.
+# The chart expects these keys at the root level (e.g. `server.ingress.*`),
+# not nested under an `argo-cd:` wrapper.
+
+# --- Server ---
+server:
+  # Ingress for ArgoCD UI
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - argocd.home
+    tls: []
+    annotations:
+      # Terminate TLS at ingress and proxy to Argo CD over HTTP.
+      # (Argo CD is configured with `--insecure`, so the backend expects HTTP.)
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      gethomepage.dev/enabled: "true"
+      gethomepage.dev/name: Argo CD
+      gethomepage.dev/group: GitOps
+      gethomepage.dev/icon: si-argocd
+
+  # Run insecure (TLS terminated at ingress)
+  extraArgs:
+    - --insecure
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# --- Repo Server ---
+repoServer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# --- Application Controller ---
+controller:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+# --- Redis ---
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# --- Dex (SSO) ---
+dex:
+  enabled: false # Not needed for homelab
+
+# --- Notifications ---
+notifications:
+  enabled: false # Enable later if needed
+
+# --- Global ---
+global:
+  # Default project domain used by ingresses
+  domain: argocd.home

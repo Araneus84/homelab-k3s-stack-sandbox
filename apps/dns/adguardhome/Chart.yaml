@@ -1,0 +1,10 @@
+apiVersion: v2
+name: adguardhome
+description: AdGuard Home DNS filtering server
+version: 1.0.0
+appVersion: "latest"
+type: application
+keywords:
+  - dns
+  - adblock
+  - filtering

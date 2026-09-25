@@ -1,0 +1,61 @@
+# Sonarr TV series management configuration
+replicaCount: 1
+
+image:
+  repository: lscr.io/linuxserver/sonarr
+  tag: latest
+  pullPolicy: Always
+
+# Environment
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Asia/Jerusalem"
+
+service:
+  type: ClusterIP
+  port: 8989
+
+homepageDiscovery:
+  enabled: true
+  name: Sonarr
+  group: Media
+  icon: si-sonarr
+
+# Queue / wanted (uses Sonarr API; set HOMEPAGE_VAR_SONARR_API_KEY on Homepage).
+homepageWidget:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  host: sonarr.home
+  annotations: {}
+
+# Persistent storage for Sonarr config
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+# NFS: NAS export path (server filesystem) vs mountPath (inside container; match qBittorrent)
+nfsMedia:
+  enabled: true
+  server: "192.168.50.110"
+  path: /mnt/HD/HD_a2/NAS
+  mountPath: /mnt/nas
+  # Same export at /downloads so qBittorrent’s default path exists here (remote path mapping not required).
+  downloadsAliasPath: /downloads
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []

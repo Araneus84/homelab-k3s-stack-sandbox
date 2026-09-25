@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "cluster-backup.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "cluster-backup.fullname" . }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: RETENTION_DAYS
+                  value: {{ .Values.retentionDays | quote }}
+              volumeMounts:
+                - name: backup-data
+                  mountPath: /backup
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+          volumes:
+            {{- if .Values.persistence.enabled }}
+            - name: backup-data
+              persistentVolumeClaim:
+                claimName: {{ include "cluster-backup.fullname" . }}-data
+            {{- else }}
+            - name: backup-data
+              emptyDir: {}
+            {{- end }}
+            - name: script
+              configMap:
+                name: {{ include "cluster-backup.fullname" . }}-script
+                defaultMode: 0755

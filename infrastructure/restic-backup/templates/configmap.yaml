@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "restic-backup.fullname" . }}-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "restic-backup.labels" . | nindent 4 }}
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    export PATH="/opt:/usr/local/bin:/usr/bin:/bin"
+    RESTIC_BIN="/opt/restic"
+    NS="${TARGET_NAMESPACE:?}"
+    STS="{{ .Values.backup.statefulSetName }}"
+    SCALE_TIMEOUT="{{ .Values.backup.scaleTimeoutSeconds }}"
+    export RESTIC_REPOSITORY="{{ .Values.restic.repositoryMountPath }}"
+    export RESTIC_PASSWORD="${RESTIC_PASSWORD:?missing secret}"
+
+    log() { echo "[restic-backup] $*"; }
+
+    scale_up() {
+      log "ensure ${STS} scaled up (cleanup)"
+      kubectl -n "${NS}" scale statefulset "${STS}" --replicas=1 || true
+    }
+    trap scale_up EXIT
+
+    if [[ ! -x "${RESTIC_BIN}" ]]; then
+      log "restic binary missing at ${RESTIC_BIN}"
+      exit 1
+    fi
+
+    log "ensure repository exists"
+    if ! "${RESTIC_BIN}" snapshots >/dev/null 2>&1; then
+      log "restic init (first run)"
+      "${RESTIC_BIN}" init
+    fi
+
+    log "scale down ${STS} for consistent Plex DB copy (RWO PVC handoff)"
+    kubectl -n "${NS}" scale statefulset "${STS}" --replicas=0
+    kubectl -n "${NS}" wait --for=delete "pod/${STS}-0" --timeout="${SCALE_TIMEOUT}s" || true
+    for _ in $(seq 1 60); do
+      COUNT=$(kubectl -n "${NS}" get pods -l "app.kubernetes.io/name=plex" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+      if [[ "${COUNT}" == "0" ]]; then
+        break
+      fi
+      sleep 5
+    done
+
+    log "run backup"
+    TAGS=( {{- range .Values.backup.tags }} "--tag={{ . }}" {{- end }} )
+    EXCLUDES=( {{- range .Values.backup.excludes }} "--exclude={{ . }}" {{- end }} )
+    "${RESTIC_BIN}" backup \
+      "${TAGS[@]}" \
+      "${EXCLUDES[@]}" \
+      "{{ .Values.backup.sourceMountPath }}"
+
+    log "forget + prune (retention)"
+    "${RESTIC_BIN}" forget --prune \
+      --keep-daily {{ .Values.retention.keepDaily }} \
+      --keep-monthly {{ .Values.retention.keepMonthly }} \
+      --keep-yearly {{ .Values.retention.keepYearly }}
+
+    log "repo stats"
+    "${RESTIC_BIN}" stats || true
+    log "finished backup + retention"
+    trap - EXIT
+    scale_up
+    log "done"

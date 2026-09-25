@@ -1,0 +1,14 @@
+apiVersion: v2
+name: loki-stack
+description: Loki + Promtail for homelab logging
+type: application
+version: 1.0.0
+appVersion: "3.6.7"
+
+dependencies:
+  - name: loki
+    version: "6.55.0"
+    repository: "https://grafana.github.io/helm-charts"
+  - name: promtail
+    version: "6.17.1"
+    repository: "https://grafana.github.io/helm-charts"

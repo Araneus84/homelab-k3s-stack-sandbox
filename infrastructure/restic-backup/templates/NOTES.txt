@@ -1,0 +1,18 @@
+Restic deduplicated backups for Plex config (PVC {{ .Values.backup.dataPvcName }}).
+
+1) Create the repository password secret (once), in the SAME namespace as this release (e.g. media):
+
+   kubectl create secret generic {{ .Values.restic.passwordSecretName }} -n {{ .Release.Namespace }} \
+     --from-literal={{ .Values.restic.passwordSecretKey }}='(use a long random value; keep it forever for this repo)'
+
+2) First successful job will `restic init` the NFS-backed PVC ({{ include "restic-backup.fullname" . }}-repo).
+
+3) Daily backup briefly scales StatefulSet {{ .Values.backup.statefulSetName }} to 0 so the RWO config PVC can mount to the Job (consistent SQLite copy).
+
+Restore (example — run from an admin machine with cluster access):
+
+   kubectl -n {{ .Release.Namespace }} scale statefulset {{ .Values.backup.statefulSetName }} --replicas=0
+   kubectl wait --for=delete pod/{{ .Values.backup.statefulSetName }}-0 -n {{ .Release.Namespace }} --timeout=300s
+   # mount same PVCs into a restore pod or use restic restore to a temp path then kubectl cp
+
+Use `restic snapshots` / `restic restore` from a debug pod mounting only the repo PVC, with the same RESTIC_PASSWORD.

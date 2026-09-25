@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "plex.fullname" . }}
+  labels:
+    {{- include "plex.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "plex.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "plex.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "plex.selectorLabels" . | nindent 8 }}
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      # securityContext omitted: plexinc/pms-docker starts as root to run its start.sh script,
+      # which applies PLEX_UID/PLEX_GID ownership to /config and /transcode before exec'ing
+      # the Plex Media Server process as the configured user. Setting runAsNonRoot or
+      # runAsUser: 1000 at the pod level conflicts with this init sequence and breaks startup.
+      # Additionally, hostNetwork: true is required for GDM (UDP discovery) and DLNA broadcast.
+      # UID/GID are controlled via PLEX_UID and PLEX_GID environment variables.
+      containers:
+        - name: plex
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- if .Values.existingClaimSecret }}
+            - name: PLEX_CLAIM
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingClaimSecret }}
+                  key: claim-token
+            {{- end }}
+          ports:
+            - name: plex
+              containerPort: 32400
+              protocol: TCP
+            - name: dlna-tcp
+              containerPort: 32469
+              protocol: TCP
+            - name: dlna-udp
+              containerPort: 1900
+              protocol: UDP
+            - name: gdm1
+              containerPort: 32410
+              protocol: UDP
+            - name: gdm2
+              containerPort: 32412
+              protocol: UDP
+            - name: gdm3
+              containerPort: 32413
+              protocol: UDP
+            - name: gdm4
+              containerPort: 32414
+              protocol: UDP
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            {{- if .Values.nfsMedia.enabled }}
+            - name: media
+              mountPath: {{ .Values.nfsMedia.mountPath }}
+              readOnly: true
+            {{- if .Values.nfsMedia.legacyMirrorPath }}
+            - name: media-legacy
+              mountPath: {{ .Values.nfsMedia.legacyMirrorPath }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            - name: transcode
+              mountPath: /transcode
+          livenessProbe:
+            httpGet:
+              path: /web/index.html
+              port: plex
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /web/index.html
+              port: plex
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /web/index.html
+              port: plex
+            # Plex can take several minutes to come up after upgrades/DB checks.
+            # startupProbe gates liveness so we avoid restart loops during boot.
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 90
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "plex.fullname" . }}-config
+        {{- if .Values.nfsMedia.enabled }}
+        - name: media
+          nfs:
+            server: {{ .Values.nfsMedia.server }}
+            path: {{ .Values.nfsMedia.path }}
+            readOnly: true
+        {{- if .Values.nfsMedia.legacyMirrorPath }}
+        - name: media-legacy
+          nfs:
+            server: {{ .Values.nfsMedia.server }}
+            path: {{ .Values.nfsMedia.path }}
+            readOnly: true
+        {{- end }}
+        {{- end }}
+        - name: transcode
+          emptyDir:
+            sizeLimit: 10Gi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

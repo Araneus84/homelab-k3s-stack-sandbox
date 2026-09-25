@@ -1,0 +1,47 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/flaresolverr/flaresolverr
+  tag: "v3.3.21"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  TZ: "Asia/Jerusalem"
+  LOG_LEVEL: "info"
+
+service:
+  type: ClusterIP
+  port: 8191
+
+homepageDiscovery:
+  enabled: true
+  name: FlareSolverr
+  group: Media
+  icon: mdi-cloud-sync
+
+ingress:
+  enabled: true
+  className: nginx
+  host: flaresolverr.home
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+strategy:
+  type: Recreate
+
+# securityContext: intentionally omitted.
+# FlareSolverr runs a headless Chromium browser which requires Linux user-namespace sandbox
+# support (SYS_ADMIN) or --no-sandbox mode. Pod-level restrictions (runAsNonRoot,
+# readOnlyRootFilesystem) break Chrome's sandbox initialization. The official image
+# internally drops to an unprivileged user (UID 65534) after startup.
+# securityContext: {}  # uncomment only if testing a hardened Chromium config

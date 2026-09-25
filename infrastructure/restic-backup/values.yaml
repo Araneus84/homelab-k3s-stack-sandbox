@@ -1,0 +1,67 @@
+# Deploy this chart into the SAME namespace as the workload whose PVC you back up (e.g. media for Plex),
+# so the Job can mount that PVC. Restic repository lives on a separate NFS-backed PVC.
+
+schedule: "0 3 * * *"
+# Kubernetes 1.27+ CronJob timezone (optional).
+timeZone: "Asia/Jerusalem"
+
+successfulJobsHistoryLimit: 2
+failedJobsHistoryLimit: 3
+
+# restic/restic binary is copied in from an initContainer; kubectl comes from bitnami image.
+images:
+  kubectl:
+    repository: bitnami/kubectl
+    tag: "1.31.4-debian-12-r2"
+    pullPolicy: IfNotPresent
+  restic:
+    repository: restic/restic
+    tag: "0.16.4"
+    pullPolicy: IfNotPresent
+
+# Secret must exist in the release namespace before first sync:
+#   kubectl create secret generic restic-plex-credentials -n media \
+#     --from-literal=RESTIC_PASSWORD='(long random)'
+# Same password forever for this repository; rotate only if you re-init the repo.
+restic:
+  passwordSecretName: restic-plex-credentials
+  passwordSecretKey: RESTIC_PASSWORD
+  repositoryMountPath: /restic-repo
+
+repoPvc:
+  enabled: true
+  storageClassName: nfs-client
+  size: 50Gi
+  accessMode: ReadWriteOnce
+
+backup:
+  enabled: true
+  # StatefulSet to scale to 0 during backup so the RWO config PVC can mount to the Job (brief downtime).
+  statefulSetName: plex
+  dataPvcName: plex-config
+  sourceMountPath: /plex-data
+  scaleTimeoutSeconds: 300
+  tags:
+    - plex-config
+  excludes:
+    - "**/Cache/**"
+    - "**/Crash Reports/**"
+
+retention:
+  keepDaily: 14
+  keepMonthly: 1
+  keepYearly: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001

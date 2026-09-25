@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Public portfolio repo: no cluster creds. Plex image bumps via PR only; merge manually so Argo CD syncs from git.",
+  "timezone": "Asia/Jerusalem",
+  "schedule": ["before 3:00am"],
+  "dependencyDashboard": false,
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Plex official Docker image tag in Helm values (Argo CD path apps/media/plex).",
+      "managerFilePatterns": ["/^apps\\/media\\/plex\\/values\\.yaml$/"],
+      "matchStrings": [
+        "(?m)^\\s*repository:\\s*plexinc/pms-docker\\s*\\n\\s*tag:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "plexinc/pms-docker",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "loose"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["plexinc/pms-docker"],
+      "automerge": false,
+      "labels": ["plex", "docker"],
+      "allowedVersions": "/^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+-[0-9a-f]+(-amd64)?$/i",
+      "description": "Never propose floating tags like latest; only Plex release-style tags."
+    }
+  ]
+}

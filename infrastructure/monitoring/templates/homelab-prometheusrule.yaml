@@ -1,0 +1,269 @@
+---
+# Homelab PrometheusRule (monitoring chart). Label `release` must match kube-prometheus-stack's
+# Helm release name (here: Argo CD app name `monitoring`).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app.kubernetes.io/part-of: kube-prometheus-stack
+spec:
+  groups:
+
+    # --------------------------------------------------------------------------
+    # Pod health: crash-looping containers
+    # --------------------------------------------------------------------------
+    - name: homelab.pods
+      rules:
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Pod {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.pod" }} {{ "}" }}{{ "}" }} is crash-looping'
+            description: >
+              Container {{ "{{" }} {{ "$labels.container" }} {{ "}" }}{{ "}" }} in pod {{ "{{" }} {{ "$labels.pod" }} {{ "}" }}{{ "}" }}
+              (namespace {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}) has restarted more than 3 times
+              in the last 15 minutes. Check logs: kubectl logs -n {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}
+              {{ "{{" }} {{ "$labels.pod" }} {{ "}" }}{{ "}" }} -c {{ "{{" }} {{ "$labels.container" }} {{ "}" }}{{ "}" }} --previous
+
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_ready{condition="true"} == 0
+            and on(pod, namespace)
+            kube_pod_status_phase{phase=~"Running|Pending"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Pod {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.pod" }} {{ "}" }}{{ "}" }} is not ready'
+            description: >
+              Pod {{ "{{" }} {{ "$labels.pod" }} {{ "}" }}{{ "}" }} in namespace {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }} has been
+              in a non-Ready state for more than 10 minutes.
+
+    # --------------------------------------------------------------------------
+    # Node resources: memory pressure and sustained CPU
+    # --------------------------------------------------------------------------
+    - name: homelab.node
+      rules:
+        - alert: NodeMemoryPressureHigh
+          expr: |
+            (
+              node_memory_MemAvailable_bytes /
+              node_memory_MemTotal_bytes
+            ) * 100 < 15
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Node memory available below 15% on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }}'
+            description: >
+              Node {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} has less than 15% memory available
+              (current: {{ "{{" }} {{ "$value | humanizePercentage" }} {{ "}" }}{{ "}" }}). Consider checking for
+              memory-hungry pods or a memory leak.
+
+        - alert: NodeMemoryCritical
+          expr: |
+            (
+              node_memory_MemAvailable_bytes /
+              node_memory_MemTotal_bytes
+            ) * 100 < 5
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: 'Node memory critically low on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }}'
+            description: >
+              Node {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} has less than 5% memory available
+              (current: {{ "{{" }} {{ "$value | humanizePercentage" }} {{ "}" }}{{ "}" }}). OOM kill risk is high.
+
+        - alert: NodeCPUSustainedHigh
+          expr: |
+            (
+              1 - avg by(instance) (
+                rate(node_cpu_seconds_total{mode="idle"}[5m])
+              )
+            ) * 100 > 90
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Node CPU above 90% for 15 minutes on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }}'
+            description: >
+              Node {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} has sustained CPU usage above 90% for
+              the past 15 minutes (current: {{ "{{" }} {{ "$value | humanize" }} {{ "}" }}{{ "}" }}%). Check for
+              runaway processes or resource-hungry workloads.
+
+    # --------------------------------------------------------------------------
+    # Disk: PVC / node filesystem near capacity
+    # --------------------------------------------------------------------------
+    - name: homelab.disk
+      rules:
+        - alert: NodeDiskSpaceLow
+          expr: |
+            (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} /
+              node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            ) * 100 < 20
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Disk space below 20% on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} ({{ "{{" }} {{ "$labels.mountpoint" }} {{ "}" }}{{ "}" }})'
+            description: >
+              Filesystem {{ "{{" }} {{ "$labels.mountpoint" }} {{ "}" }}{{ "}" }} on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} has
+              less than 20% free space remaining
+              (current: {{ "{{" }} {{ "$value | humanizePercentage" }} {{ "}" }}{{ "}" }} free).
+
+        - alert: NodeDiskSpaceCritical
+          expr: |
+            (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} /
+              node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            ) * 100 < 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: 'Disk space critically low on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} ({{ "{{" }} {{ "$labels.mountpoint" }} {{ "}" }}{{ "}" }})'
+            description: >
+              Filesystem {{ "{{" }} {{ "$labels.mountpoint" }} {{ "}" }}{{ "}" }} on {{ "{{" }} {{ "$labels.instance" }} {{ "}" }}{{ "}" }} has
+              less than 5% free space remaining. Writes may start failing.
+
+        - alert: PVCUsageHigh
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes /
+              kubelet_volume_stats_capacity_bytes
+            ) * 100 > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'PVC {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.persistentvolumeclaim" }} {{ "}" }}{{ "}" }} above 80%'
+            description: >
+              PersistentVolumeClaim {{ "{{" }} {{ "$labels.persistentvolumeclaim" }} {{ "}" }}{{ "}" }} in namespace
+              {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }} is {{ "{{" }} {{ "$value | humanize" }} {{ "}" }}{{ "}" }}% full. Consider
+              expanding the PVC or cleaning up data.
+
+        - alert: PVCUsageCritical
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes /
+              kubelet_volume_stats_capacity_bytes
+            ) * 100 > 95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: 'PVC {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.persistentvolumeclaim" }} {{ "}" }}{{ "}" }} above 95%'
+            description: >
+              PersistentVolumeClaim {{ "{{" }} {{ "$labels.persistentvolumeclaim" }} {{ "}" }}{{ "}" }} in namespace
+              {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }} is {{ "{{" }} {{ "$value | humanize" }} {{ "}" }}{{ "}" }}% full. Risk of write
+              failures and application corruption.
+
+    # --------------------------------------------------------------------------
+    # ArgoCD: sync failures and degraded applications
+    # --------------------------------------------------------------------------
+    - name: homelab.argocd
+      rules:
+        - alert: ArgoCDAppOutOfSync
+          expr: |
+            argocd_app_info{sync_status="OutOfSync"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} is out of sync'
+            description: >
+              ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} (project: {{ "{{" }} {{ "$labels.project" }} {{ "}" }}{{ "}" }})
+              has been out of sync for more than 15 minutes. Check the ArgoCD UI
+              or run: argocd app sync {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }}
+
+        - alert: ArgoCDAppDegraded
+          expr: |
+            argocd_app_info{health_status="Degraded"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} is degraded'
+            description: >
+              ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} (project: {{ "{{" }} {{ "$labels.project" }} {{ "}" }}{{ "}" }})
+              has health status Degraded. One or more managed resources are unhealthy.
+
+        - alert: ArgoCDAppSyncUnknown
+          expr: |
+            argocd_app_info{sync_status="Unknown"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} sync status is Unknown'
+            description: >
+              ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} has an Unknown sync status for
+              more than 10 minutes. This may indicate a controller issue or a
+              resource that cannot be reconciled.
+
+        - alert: ArgoCDAppSyncFailed
+          expr: |
+            argocd_app_info{operation_phase="Failed"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} sync operation failed'
+            description: >
+              ArgoCD application {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} (project: {{ "{{" }} {{ "$labels.project" }} {{ "}" }}{{ "}" }})
+              had a sync operation that failed. Check the ArgoCD UI for the error
+              or run: argocd app sync {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }}
+
+    # --------------------------------------------------------------------------
+    # cert-manager: certificate expiry warnings
+    # Requires cert-manager with prometheus.enabled: true and servicemonitor.enabled: true
+    # (already set in infrastructure/cert-manager/values.yaml)
+    # --------------------------------------------------------------------------
+    - name: homelab.certificates
+      rules:
+        - alert: CertificateExpiringSoon
+          expr: |
+            certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Certificate {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} expires in < 14 days'
+            description: >
+              Certificate {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} in namespace {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}
+              expires in less than 14 days
+              (at {{ "{{" }} {{ "$value | humanizeDuration" }} {{ "}" }}{{ "}" }} from now).
+              Check cert-manager logs: kubectl logs -n cert-manager deploy/cert-manager
+
+        - alert: CertificateExpiryCritical
+          expr: |
+            certmanager_certificate_expiration_timestamp_seconds - time() < 3 * 24 * 3600
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: 'Certificate {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} expires in < 3 days'
+            description: >
+              Certificate {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} in namespace {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}
+              expires in less than 3 days. Immediate renewal required.
+
+        - alert: CertificateRenewalFailed
+          expr: |
+            certmanager_certificate_ready_status{condition="False"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Certificate {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}/{{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} is not ready'
+            description: >
+              cert-manager Certificate {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }} in namespace {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }}
+              has Ready=False for more than 15 minutes. Renewal may have failed.
+              Check: kubectl describe certificate -n {{ "{{" }} {{ "$labels.namespace" }} {{ "}" }}{{ "}" }} {{ "{{" }} {{ "$labels.name" }} {{ "}" }}{{ "}" }}

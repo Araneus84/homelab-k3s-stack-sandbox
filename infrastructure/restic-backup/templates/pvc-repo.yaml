@@ -1,0 +1,16 @@
+{{- if .Values.repoPvc.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "restic-backup.fullname" . }}-repo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "restic-backup.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.repoPvc.accessMode | default "ReadWriteOnce" }}
+  storageClassName: {{ .Values.repoPvc.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.repoPvc.size | quote }}
+{{- end }}

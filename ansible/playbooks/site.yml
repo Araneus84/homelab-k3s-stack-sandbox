@@ -1,0 +1,71 @@
+---
+# ==============================================================================
+# Master Playbook - Full homelab provisioning from bare metal to k3s
+# ==============================================================================
+# Usage (from your laptop / Ansible control machine):
+#   ansible-playbook playbooks/site.yml
+# Tasks run over SSH on hosts: k3s_servers (the homelab node), not on the laptop.
+#
+# This playbook runs all roles in order:
+#   1. common   - Base OS configuration
+#   2. security - SSH hardening, firewall, fail2ban
+#   3. nfs      - NFS client mounts from NAS
+#   4. k3s      - k3s installation and verification
+#   5. k3s_dr_backup - daily NAS mirror of k3s DB + local-path PVCs (crash plan)
+#
+# After this completes, run ../scripts/bootstrap.sh to install ArgoCD
+# which will then deploy all applications from git.
+# ==============================================================================
+
+- name: Provision homelab from bare metal to k3s
+  hosts: k3s_servers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify connectivity
+      ansible.builtin.ping:
+
+    - name: Gather OS facts
+      ansible.builtin.setup:
+        filter: ansible_distribution*
+
+    - name: Verify Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+        fail_msg: "This playbook only supports Ubuntu. Detected: {{ ansible_distribution }}"
+        success_msg: "Running on Ubuntu {{ ansible_distribution_version }}"
+
+  roles:
+    - role: common
+      tags: [common, setup]
+    - role: security
+      tags: [security, setup]
+    - role: nfs
+      tags: [nfs, setup]
+    - role: k3s
+      tags: [k3s]
+    - role: k3s_dr_backup
+      tags: [k3s, k3s_dr_backup, dr]
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Homelab provisioning complete!
+
+          Next steps:
+            1. Copy kubeconfig to your local machine:
+               scp {{ primary_user }}@{{ ansible_host }}:/etc/rancher/k3s/k3s.yaml ~/.kube/config
+               sed -i 's/127.0.0.1/{{ ansible_host }}/g' ~/.kube/config
+
+            2. Run the bootstrap script:
+               cd ../scripts && ./bootstrap.sh
+
+            3. ArgoCD will sync all applications from git.
+
+            4. DR: NAS folder {{ nfs_mount_point }}/homelab-k3s-dr-backup/ (timer k3s-dr-backup.timer)
+               Full restore: docs/disaster-recovery.md
+          ============================================

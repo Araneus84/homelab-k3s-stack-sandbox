@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nfs-provisioner
+description: NFS dynamic provisioner for persistent volumes from NAS
+version: 1.0.0
+appVersion: "4.0.2"
+type: application
+
+dependencies:
+  - name: nfs-subdir-external-provisioner
+    version: "4.0.18"
+    repository: "https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner"

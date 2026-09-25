@@ -1,0 +1,2 @@
+# Encrypted SealedSecret manifests — ciphertext is not a live secret; scanning causes noise.
+*.sealed.yaml

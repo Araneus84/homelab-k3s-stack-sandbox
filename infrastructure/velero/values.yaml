@@ -1,0 +1,42 @@
+# Velero — parked until the rest of the stack is deployed.
+#
+# Argo CD: there is intentionally NO `argocd-apps/infrastructure/velero.yaml` yet.
+# When you are ready, re-add that Application and wire credentials + storage.
+#
+# Planned direction (your intent):
+# - Target: personal Google Drive. Velero does not speak Drive natively; typical options are
+#   an S3-compatible layer in front of Drive, GCS, or a different tool (e.g. Restic + rclone).
+# - Scope: PVCs that hold app *configuration*; skip large / regeneratable data (e.g. Plex
+#   transcode/cache) via labels, opt-in namespaces, or excluded volume patterns in backup specs.
+#
+# Before first sync: create Secret `velero-cloud-credentials` in namespace `velero` with key
+# `cloud` (provider-specific credentials file body), matching whatever plugin/BSL you use.
+
+velero:
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.10.1
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+
+  credentials:
+    useSecret: true
+    existingSecret: velero-cloud-credentials
+
+  deployNodeAgent: true
+  snapshotsEnabled: false
+  # No BackupStorageLocation / schedules until you configure storage (e.g. Drive path).
+  backupsEnabled: false
+
+  nodeAgent:
+    podVolumePath: /var/lib/kubelet/pods
+    tolerations:
+      - operator: Exists
+
+  configuration:
+    backupStorageLocation: []
+    volumeSnapshotLocation: []
+
+  schedules: {}

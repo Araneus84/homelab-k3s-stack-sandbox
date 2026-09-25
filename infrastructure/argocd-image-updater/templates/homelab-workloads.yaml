@@ -1,0 +1,49 @@
+{{- if .Values.homelabImageUpdater.enabled }}
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: homelab-workloads
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: homelab
+spec:
+  writeBackConfig:
+    method: {{ .Values.homelabImageUpdater.writeBack.method | quote }}
+{{- if eq .Values.homelabImageUpdater.writeBack.method "git" }}
+    gitConfig:
+      branch: {{ .Values.homelabImageUpdater.writeBack.git.branch | quote }}
+      repository: {{ .Values.homelabImageUpdater.writeBack.git.repository | quote }}
+{{- end }}
+  applicationRefs:
+{{- range .Values.homelabImageUpdater.workloads }}
+    - namePattern: {{ .namePattern | quote }}
+      images:
+{{- range .images }}
+        - alias: {{ .alias | quote }}
+          imageName: {{ .imageName | quote }}
+          commonUpdateSettings:
+{{- if or .updateStrategy .allowTags }}
+{{- if .updateStrategy }}
+            updateStrategy: {{ .updateStrategy }}
+{{- end }}
+{{- if .allowTags }}
+            allowTags: {{ .allowTags | quote }}
+{{- end }}
+{{- else }}
+            updateStrategy: semver
+{{- end }}
+          manifestTargets:
+            helm:
+              name: image.repository
+              tag: image.tag
+{{- end }}
+{{- if eq $.Values.homelabImageUpdater.writeBack.method "git" }}
+      writeBackConfig:
+        method: git
+        gitConfig:
+          branch: {{ $.Values.homelabImageUpdater.writeBack.git.branch | quote }}
+          repository: {{ $.Values.homelabImageUpdater.writeBack.git.repository | quote }}
+          writeBackTarget: helmvalues:{{ .valuesPath }}
+{{- end }}
+{{- end }}
+{{- end }}

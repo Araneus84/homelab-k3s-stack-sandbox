@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "adguardhome.fullname" . }}
+  labels:
+    {{- include "adguardhome.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "adguardhome.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "adguardhome.selectorLabels" . | nindent 8 }}
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # securityContext omitted: adguard/adguardhome runs as root internally and requires
+      # hostNetwork: true to bind port 53 (DNS) directly on the node IP. The init container
+      # uses the same image and needs write access to /opt/adguardhome/conf to seed the config
+      # file on first start. NET_BIND_SERVICE capability is implicitly available via hostNetwork.
+      # Setting runAsNonRoot here would break the init container's config copy and AdGuard's
+      # port 53 binding on the host network interface.
+      containers:
+        - name: adguardhome
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: conf
+              mountPath: /opt/adguardhome/conf
+            - name: work
+              mountPath: /opt/adguardhome/work
+            - name: config
+              mountPath: /config/AdGuardHome.yaml
+              subPath: AdGuardHome.yaml
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      initContainers:
+        - name: init-adguard-config
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - >
+              if [ ! -f /opt/adguardhome/conf/AdGuardHome.yaml ]; then
+                cp /config/AdGuardHome.yaml /opt/adguardhome/conf/AdGuardHome.yaml;
+              fi
+          volumeMounts:
+            - name: conf
+              mountPath: /opt/adguardhome/conf
+            - name: config
+              mountPath: /config/AdGuardHome.yaml
+              subPath: AdGuardHome.yaml
+              readOnly: true
+      volumes:
+        - name: conf
+          persistentVolumeClaim:
+            claimName: {{ include "adguardhome.fullname" . }}-conf
+        - name: work
+          persistentVolumeClaim:
+            claimName: {{ include "adguardhome.fullname" . }}-work
+        - name: config
+          configMap:
+            name: {{ include "adguardhome.fullname" . }}-config
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+{{- end }}

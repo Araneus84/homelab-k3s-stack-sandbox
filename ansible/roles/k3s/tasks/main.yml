@@ -1,0 +1,117 @@
+---
+# ==============================================================================
+# Role: k3s - Install and configure k3s
+# ==============================================================================
+
+- name: Check if k3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Get installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_installed_version
+  changed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: "0755"
+  when: not k3s_binary.stat.exists or k3s_version not in (k3s_installed_version.stdout | default(''))
+
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy k3s server configuration
+  ansible.builtin.template:
+    src: k3s-config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart k3s
+
+- name: Install k3s
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "server"
+    K3S_KUBECONFIG_MODE: "644"
+  when: not k3s_binary.stat.exists or k3s_version not in (k3s_installed_version.stdout | default(''))
+  changed_when: true
+  notify: restart k3s
+
+- name: Wait for k3s to be ready
+  ansible.builtin.command: k3s kubectl get nodes
+  register: k3s_nodes
+  until: k3s_nodes.rc == 0 and 'Ready' in k3s_nodes.stdout
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Ensure k3s service is enabled
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+
+# --- Install Helm ---
+- name: Check if Helm is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/helm
+  register: k3s_helm_binary
+
+- name: Download Helm install script
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm.sh
+    mode: "0755"
+  when: not k3s_helm_binary.stat.exists
+
+- name: Install Helm
+  ansible.builtin.command: /tmp/get-helm.sh
+  environment:
+    DESIRED_VERSION: v3.17.0
+  when: not k3s_helm_binary.stat.exists
+  changed_when: true
+
+# --- Create namespaces ---
+- name: Create application namespaces
+  ansible.builtin.command: "k3s kubectl create namespace {{ item }}"
+  loop:
+    - infrastructure
+    - media
+    - dns
+    - home-automation
+    - security
+    - monitoring
+    - argocd
+  register: k3s_ns_result
+  changed_when: k3s_ns_result.rc == 0
+  failed_when: k3s_ns_result.rc != 0 and 'already exists' not in k3s_ns_result.stderr
+
+# --- Verify ---
+- name: Verify cluster health
+  ansible.builtin.command: k3s kubectl get nodes -o wide
+  register: k3s_cluster_status
+  changed_when: false
+
+- name: Display cluster status
+  ansible.builtin.debug:
+    msg: "{{ k3s_cluster_status.stdout_lines }}"
+
+- name: Clean up install scripts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/k3s-install.sh
+    - /tmp/get-helm.sh

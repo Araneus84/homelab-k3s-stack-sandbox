@@ -1,0 +1,52 @@
+replicaCount: 1
+
+image:
+  repository: sctx/overseerr
+  tag: "1.33.2"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  TZ: "Asia/Jerusalem"
+
+service:
+  type: ClusterIP
+  port: 5055
+
+homepageDiscovery:
+  enabled: true
+  name: Overseerr
+  group: Media
+  icon: overseerr
+
+ingress:
+  enabled: true
+  className: nginx
+  host: overseerr.home
+  annotations: {}
+
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+strategy:
+  type: Recreate
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000

@@ -1,0 +1,100 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/gethomepage/homepage
+  tag: "v1.7.0"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  TZ: "Asia/Jerusalem"
+  PUID: "1000"
+  PGID: "1000"
+
+# Widget auth: Secret `homepage-widgets` in the Homepage namespace (`dashboard`).
+# Keys must match ingress templates on Plex / qBittorrent / Sonarr charts.
+# See secrets/SEALING.txt for kubectl / kubeseal steps.
+# optional: true keeps the pod running if the Secret is missing (widgets stay empty until you create it).
+extraEnv:
+  - name: HOMEPAGE_VAR_QBIT_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: homepage-widgets
+        key: qbit-user
+        optional: true
+  - name: HOMEPAGE_VAR_QBIT_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: homepage-widgets
+        key: qbit-pass
+        optional: true
+  - name: HOMEPAGE_VAR_SONARR_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: homepage-widgets
+        key: sonarr-apikey
+        optional: true
+  - name: HOMEPAGE_VAR_RADARR_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: homepage-widgets
+        key: radarr-apikey
+        optional: true
+
+# HOMEPAGE_ALLOWED_HOSTS: comma-separated Host headers allowed (v1.0+). Include ingress host;
+# add * so browser requests via LAN IP / alternate names work.
+allowedHosts: "homepage.home,*"
+
+# List/watch Ingresses cluster-wide so Homepage can discover annotated ingresses (gethomepage.dev/*).
+# Init overwrites /app/config/kubernetes.yaml with mode: cluster whenever this is true (chart-managed).
+# Set false if you edit kubernetes.yaml by hand or do not want cluster RBAC on the Homepage pod.
+kubernetesDiscovery:
+  enabled: true
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: homepage.home
+  annotations: {}
+
+# Self-annotation for Kubernetes discovery (same keys as other apps).
+homepageDiscovery:
+  enabled: true
+  name: Homepage
+  group: Dashboard
+  icon: si-homepage
+
+# Writable /app/config — Homepage copies skeleton YAML for any file still missing after init.
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 1Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+strategy:
+  type: Recreate
+
+# ghcr.io/gethomepage/homepage runs as the 'abc' user (UID 1000) when PUID=1000 is set.
+# The init container (homepage-k8s-config) uses the same image and only writes to /config
+# (the PVC), which is owned by UID 1000 via fsGroup below. runAsNonRoot is safe here.
+# Note: if switching PUID to a different UID, update runAsUser and fsGroup to match.
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000

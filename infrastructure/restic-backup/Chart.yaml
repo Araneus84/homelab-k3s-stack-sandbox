@@ -1,0 +1,6 @@
+apiVersion: v2
+name: restic-backup
+description: Deduplicated incremental Restic backups of Plex config PVC to NFS-backed repo (daily + retention)
+type: application
+version: 0.1.0
+appVersion: "0.16.4"

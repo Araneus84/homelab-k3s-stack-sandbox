@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pihole.fullname" . }}-custom-dns
+  labels:
+    {{- include "pihole.labels" . | nindent 4 }}
+data:
+  05-custom.conf: |
+    # Wildcard local DNS for homelab services.
+    # dnsmasq syntax: address=/.domain./ip
+    # This makes `*.home` resolve to the k3s node IP.
+    address=/.home/192.168.50.100

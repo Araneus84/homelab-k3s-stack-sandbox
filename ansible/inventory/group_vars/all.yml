@@ -1,0 +1,87 @@
+---
+# ==============================================================================
+# Homelab Ansible Variables
+# ==============================================================================
+# IMPORTANT: Do NOT put secrets (passwords, tokens, API keys) in this file.
+# Use Ansible Vault for sensitive values: ansible-vault encrypt_string
+# ==============================================================================
+
+# --- System ---
+hostname: homelab
+timezone: Asia/Jerusalem
+locale: en_US.UTF-8
+
+# --- User ---
+primary_user: alex
+primary_uid: 1000
+primary_gid: 1000
+
+# --- NFS ---
+# Update these to match your NAS appliance
+nfs_server: "{{ lookup('env', 'NFS_SERVER_IP') | default('192.168.50.110', true) }}"
+nfs_base_export: /mnt/HD/HD_a2/NAS
+nfs_mount_point: /mnt/nfs
+nfs_mount_opts: "hard,intr,rsize=8192,wsize=8192,timeo=14,_netdev,nofail"
+nfs_shares:
+  - src: "{{ nfs_server }}:{{ nfs_base_export }}"
+    dest: "{{ nfs_mount_point }}"
+
+# --- k3s ---
+k3s_version: v1.31.4+k3s1
+k3s_disable_components:
+  - traefik    # Using nginx-ingress instead
+  - servicelb  # Using MetalLB or NodePort for bare metal
+k3s_extra_server_args: >-
+  --write-kubeconfig-mode 644
+  --node-name {{ hostname }}
+  --tls-san {{ ansible_host }}
+  --tls-san {{ hostname }}
+  --tls-san {{ hostname }}.local
+
+# --- Firewall ---
+firewall_allowed_ports:
+  - { port: 22, proto: tcp, comment: "SSH" }
+  - { port: 80, proto: tcp, comment: "HTTP" }
+  - { port: 443, proto: tcp, comment: "HTTPS" }
+  - { port: 6443, proto: tcp, comment: "k8s API" }
+  - { port: 53, proto: tcp, comment: "DNS TCP" }
+  - { port: 53, proto: udp, comment: "DNS UDP" }
+  - { port: 32400, proto: tcp, comment: "Plex" }
+  - { port: 10250, proto: tcp, comment: "Kubelet API" }
+  - { port: 8472, proto: udp, comment: "Flannel VXLAN" }
+  - { port: 51820, proto: udp, comment: "Flannel WireGuard" }
+
+# --- SSH ---
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_max_auth_tries: 3
+ssh_allowed_users: "{{ primary_user }}"
+
+# --- Packages ---
+common_packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - vim
+  - jq
+  - unzip
+  - nfs-common
+  - open-iscsi
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - python3-pip
+  - net-tools
+  - dnsutils
+
+# --- Sysctl (required for k8s) ---
+sysctl_params:
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+  net.ipv4.ip_forward: 1
+  net.ipv4.conf.all.forwarding: 1
+  fs.inotify.max_user_watches: 524288
+  fs.inotify.max_user_instances: 512

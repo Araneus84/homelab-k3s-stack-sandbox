@@ -1,0 +1,52 @@
+ingress-nginx:
+  controller:
+    # Use NodePort for bare-metal k3s (no cloud LB)
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30080
+        https: 30443
+
+    # Enable Prometheus metrics
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: monitoring
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+    # Security
+    config:
+      # Security headers
+      hide-headers: "X-Powered-By,Server"
+      # Temporary: avoid redirect loops while Docker may still hold :80/:443
+      ssl-redirect: "false"
+      use-forwarded-headers: "true"
+      hsts: "false"
+
+    # Important: do NOT use host ports while Docker still binds :80/:443
+    hostPort:
+      enabled: true
+
+    # Run on host network for direct port binding
+    hostNetwork: true
+
+    # Tolerate all taints (single-node cluster)
+    tolerations:
+      - operator: Exists
+
+    # Admission webhooks
+    admissionWebhooks:
+      enabled: true
+
+  # Default backend
+  defaultBackend:
+    enabled: false

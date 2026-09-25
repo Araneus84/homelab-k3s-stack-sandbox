@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cluster-backup.fullname" . }}-script
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "cluster-backup.labels" . | nindent 4 }}
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    BACKUP_ROOT=/backup
+    STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+    OUT="${BACKUP_ROOT}/${STAMP}"
+    RETENTION_DAYS="${RETENTION_DAYS:-{{ .Values.retentionDays }}}"
+    mkdir -p "${OUT}"
+
+    log() { echo "[cluster-backup] $*"; }
+
+    # --- Cluster-scoped GitOps / security ---
+    log "argocd applications"
+    kubectl get applications.argoproj.io -n argocd -o yaml > "${OUT}/argocd-applications.yaml" || log "skip applications"
+    log "argocd applicationsets"
+    kubectl get applicationsets.argoproj.io -A -o yaml > "${OUT}/argocd-applicationsets.yaml" || log "skip applicationsets"
+    log "argocd appprojects"
+    kubectl get appprojects.argoproj.io -n argocd -o yaml > "${OUT}/argocd-appprojects.yaml" || log "skip appprojects"
+    log "imageupdaters"
+    kubectl get imageupdaters.argocd-image-updater.argoproj.io -A -o yaml > "${OUT}/argocd-imageupdaters.yaml" || log "skip imageupdaters"
+    log "sealedsecrets"
+    kubectl get sealedsecrets.bitnami.com -A -o yaml > "${OUT}/sealedsecrets.yaml" || log "skip sealedsecrets"
+    log "certificates"
+    kubectl get certificates.cert-manager.io -A -o yaml > "${OUT}/certificates.yaml" || log "skip certificates"
+    log "certificaterequests"
+    kubectl get certificaterequests.cert-manager.io -A -o yaml > "${OUT}/certificaterequests.yaml" || log "skip certificaterequests"
+    log "clusterissuers"
+    kubectl get clusterissuers.cert-manager.io -o yaml > "${OUT}/clusterissuers.yaml" || log "skip clusterissuers"
+    log "issuers"
+    kubectl get issuers.cert-manager.io -A -o yaml > "${OUT}/issuers.yaml" || log "skip issuers"
+    log "ingresses"
+    kubectl get ingresses.networking.k8s.io -A -o yaml > "${OUT}/ingresses.yaml" || log "skip ingresses"
+    log "persistentvolumes"
+    kubectl get persistentvolumes -o yaml > "${OUT}/persistentvolumes.yaml" || log "skip pv"
+    log "prometheusrules"
+    kubectl get prometheusrules.monitoring.coreos.com -A -o yaml > "${OUT}/prometheusrules.yaml" || log "skip prometheusrules"
+    log "servicemonitors"
+    kubectl get servicemonitors.monitoring.coreos.com -A -o yaml > "${OUT}/servicemonitors.yaml" || log "skip servicemonitors"
+    log "podmonitors"
+    kubectl get podmonitors.monitoring.coreos.com -A -o yaml > "${OUT}/podmonitors.yaml" || log "skip podmonitors"
+
+    # --- Per-namespace dumps (media excluded by chart values) ---
+    NAMESPACES=(
+    {{- range .Values.targetNamespaces }}
+      {{ . | quote }}
+    {{- end }}
+    )
+    for NS in "${NAMESPACES[@]}"; do
+      mkdir -p "${OUT}/namespaces/${NS}"
+      log "namespace ${NS}"
+      kubectl get all,configmap,pvc,ingress -n "${NS}" -o yaml > "${OUT}/namespaces/${NS}/resources.yaml" || log "skip ns ${NS}"
+    done
+
+    # --- Retention: remove old top-level stamp dirs ---
+    if [[ "${RETENTION_DAYS}" =~ ^[0-9]+$ ]] && [[ "${RETENTION_DAYS}" -gt 0 ]]; then
+      find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended \
+        -regex '.*/[0-9]{8}T[0-9]{6}Z' -mtime "+${RETENTION_DAYS}" -print | while read -r dir; do
+        log "prune old backup: ${dir}"
+        rm -rf "${dir}"
+      done
+    fi
+
+    log "done -> ${OUT}"
+    du -sh "${OUT}" || true

@@ -1,0 +1,72 @@
+replicaCount: 1
+
+image:
+  repository: lscr.io/linuxserver/qbittorrent
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Asia/Jerusalem"
+
+service:
+  web:
+    type: ClusterIP
+    port: 8080
+  bittorrent:
+    type: NodePort
+    port: 6881
+
+homepageDiscovery:
+  enabled: true
+  name: qBittorrent
+  group: Media
+  icon: si-qbittorrent
+
+# Homepage service widget (API via in-cluster URL; set HOMEPAGE_VAR_* on the Homepage deployment).
+homepageWidget:
+  enabled: true
+  enableLeechProgress: true
+  enableLeechSize: true
+
+ingress:
+  enabled: true
+  className: nginx
+  host: qbit.home
+  annotations: {}
+
+persistence:
+  config:
+    enabled: true
+    storageClass: nfs-client
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+nfs:
+  downloads:
+    server: 192.168.50.110
+    path: /mnt/HD/HD_a2/NAS
+    mountPath: /mnt/nas
+    # Same NFS export at /downloads so linuxserver default save path matches Sonarr/Radarr.
+    aliasMountPath: /downloads
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# securityContext: pod-level runAsUser/runAsGroup are intentionally omitted.
+# lscr.io/linuxserver/qbittorrent uses s6-overlay, which must start as root to apply
+# PUID/PGID permission fixes before dropping to the unprivileged 'abc' user.
+# Setting runAsUser: 1000 here causes a crash-loop. Use PUID/PGID env vars instead.
+# securityContext: {}  # uncomment only if switching to a non-linuxserver image
+
+strategy:
+  type: Recreate

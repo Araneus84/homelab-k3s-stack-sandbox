@@ -1,0 +1,29 @@
+---
+# ==============================================================================
+# k3s Playbook - Install k3s only (assumes OS is already configured)
+# ==============================================================================
+# Usage:
+#   ansible-playbook playbooks/k3s.yml
+# ==============================================================================
+
+- name: Install and configure k3s
+  hosts: k3s_servers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify swap is disabled
+      ansible.builtin.command: swapon --show
+      register: swap_status
+      changed_when: false
+
+    - name: Fail if swap is enabled
+      ansible.builtin.assert:
+        that:
+          - swap_status.stdout == ""
+        fail_msg: "Swap is still enabled. Run the setup playbook first."
+        success_msg: "Swap is disabled."
+
+  roles:
+    - role: k3s
+      tags: [k3s]

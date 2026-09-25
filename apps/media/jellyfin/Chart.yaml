@@ -1,0 +1,10 @@
+apiVersion: v2
+name: jellyfin
+description: Jellyfin Media Server for homelab
+version: 1.0.0
+appVersion: "10.9.11"
+type: application
+keywords:
+  - media
+  - jellyfin
+  - streaming

@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "homeassistant.fullname" . }}
+  labels:
+    {{- include "homeassistant.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "homeassistant.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "homeassistant.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "homeassistant.selectorLabels" . | nindent 8 }}
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      # securityContext omitted at pod level: Home Assistant requires hostNetwork: true for
+      # mDNS/Zeroconf discovery, Zigbee/Z-Wave USB device access, and local network integrations.
+      # The official homeassistant/home-assistant image runs as root internally. The init
+      # container below also explicitly requires runAsUser: 0 to write configuration.yaml.
+      # Setting runAsNonRoot at the pod level would break both the init container and HA itself.
+      {{- if and .Values.http .Values.http.ensureTrustedProxyConfig }}
+      initContainers:
+        - name: ensure-http-proxy
+          image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            # runAsUser: 0 required here — this init container writes /config/configuration.yaml
+            # which is owned by root in the HA image's volume. Changing to a non-root user
+            # causes permission denied errors on fresh PVC mounts.
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              f=/config/configuration.yaml
+              if [ -f "$f" ] && grep -q "use_x_forwarded_for" "$f"; then
+                exit 0
+              fi
+              if [ -f "$f" ] && grep -qE '^http:' "$f"; then
+                echo "ensure-http-proxy: configuration.yaml already has http: — add use_x_forwarded_for and trusted_proxies manually" >&2
+                exit 0
+              fi
+              if [ ! -f "$f" ]; then
+                echo "default_config:" > "$f"
+              fi
+              {
+                echo ""
+                echo "http:"
+                echo "  use_x_forwarded_for: true"
+                echo "  trusted_proxies:"
+          {{- range (.Values.http.trustedProxies | default list) }}
+                echo "    - {{ . }}"
+          {{- end }}
+              } >> "$f"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "homeassistant.fullname" . }}-config

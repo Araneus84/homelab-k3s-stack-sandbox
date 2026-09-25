@@ -1,0 +1,84 @@
+replicaCount: 1
+
+image:
+  repository: homeassistant/home-assistant
+  tag: "2024.12.5"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  TZ: "Asia/Jerusalem"
+
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# securityContext: intentionally omitted at pod level.
+# homeassistant/home-assistant runs as root internally for device access (USB, mDNS, Zeroconf).
+# hostNetwork: true is required for local network protocol discovery.
+# The init container (ensure-http-proxy) must also run as UID 0 to write configuration.yaml.
+# runAsNonRoot would break both the init container and the main HA process.
+# securityContext: {}  # uncomment only if using a custom non-root HA image
+
+service:
+  type: ClusterIP
+  port: 8123
+
+homepageDiscovery:
+  enabled: true
+  name: Home Assistant
+  group: Home
+  icon: si-homeassistant
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ha.home
+  # WebSocket + long-lived connections (UI) — websocket-services is set in the chart template
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+# Appended to /config/configuration.yaml on first start if no use_x_forwarded_for is present.
+# Private ranges cover nginx-ingress and typical LAN proxies (see HA http docs).
+http:
+  ensureTrustedProxyConfig: true
+  trustedProxies:
+    - 127.0.0.1
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 8123
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 8123
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 6

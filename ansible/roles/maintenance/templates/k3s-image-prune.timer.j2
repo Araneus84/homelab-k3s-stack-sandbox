@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Weekly prune of unused container images for k3s
+
+[Timer]
+OnCalendar={{ maintenance_image_prune_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

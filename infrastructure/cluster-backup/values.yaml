@@ -1,0 +1,52 @@
+# Supplemental YAML dumps to an nfs-client PVC (no raw Secrets). For full crash restore use
+# Ansible k3s_dr_backup + NAS mirror — see docs/disaster-recovery.md
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace: backup
+
+schedule: "0 3 * * *"
+# How many days of timestamped backup folders to keep under /backup
+retentionDays: 14
+
+image:
+  repository: bitnami/kubectl
+  tag: "1.31.4-debian-12-r2"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClass: nfs-client
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+# Namespaces to dump (workloads + configmaps + PVCs + ingress; not secrets).
+# "media" intentionally omitted — large and reproducible from Git + NAS media.
+targetNamespaces:
+  - argocd
+  - infrastructure
+  - cert-manager
+  - monitoring
+  - dns
+  - dashboard
+  - home-automation
+  - security
+  - kube-system
+
+successfulJobsHistoryLimit: 2
+failedJobsHistoryLimit: 3
+
+# bitnami/kubectl defaults to UID 1001; if the PVC is not writable, try {} or runAsUser: 0 (not recommended).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001

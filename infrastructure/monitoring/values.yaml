@@ -1,0 +1,161 @@
+kube-prometheus-stack:
+  prometheusOperator:
+    # Admission webhook + certgen Job is a frequent source of Argo CD "stuck sync" pain
+    # (Helm hooks + SSA). For a homelab, disabling this is usually fine.
+    admissionWebhooks:
+      enabled: false
+
+  # --- Grafana ---
+  grafana:
+    enabled: true
+
+    # Ingress for Grafana UI
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      hosts:
+        - grafana.home
+      tls: []
+      annotations:
+        gethomepage.dev/enabled: "true"
+        gethomepage.dev/name: Grafana
+        gethomepage.dev/group: Monitoring
+        gethomepage.dev/icon: si-grafana
+
+    # Default admin credentials are managed via sealed secret
+    # Override with environment variables in production
+    adminUser: admin
+    # adminPassword is set via existing secret -- see docs/setup.md
+    admin:
+      existingSecret: grafana-admin-credentials
+      userKey: admin-user
+      passwordKey: admin-password
+
+    # Persistent storage for dashboards
+    persistence:
+      enabled: true
+      storageClassName: nfs-client
+      size: 5Gi
+
+    # Your Grafana pod fails during init because NFS doesn't allow `chown`.
+    # Disabling init-chown lets Grafana start as user `472` with `fsGroup: 472`.
+    initChownData:
+      enabled: false
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Auto-discover dashboards from ConfigMaps
+    sidecar:
+      dashboards:
+        enabled: true
+        searchNamespace: ALL
+      datasources:
+        # Prometheus + Alertmanager are listed explicitly in additionalDataSources below
+        # so every datasource lives in Git (chart defaults are off).
+        defaultDatasourceEnabled: false
+
+    # Grafana datasource provisioning (no secrets — in-cluster HTTP, Grafana-side proxy).
+    # URLs use Helm tpl against the kube-prometheus-stack release name/namespace.
+    additionalDataSources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://{{ template "kube-prometheus-stack.fullname" . }}-prometheus.{{ template "kube-prometheus-stack.namespace" . }}:{{ .Values.prometheus.service.port }}/{{ trimPrefix "/" .Values.prometheus.prometheusSpec.routePrefix }}
+        isDefault: true
+        editable: false
+        jsonData:
+          httpMethod: POST
+          timeInterval: 30s
+      - name: Alertmanager
+        type: alertmanager
+        uid: alertmanager
+        access: proxy
+        url: http://{{ template "kube-prometheus-stack.fullname" . }}-alertmanager.{{ template "kube-prometheus-stack.namespace" . }}:{{ .Values.alertmanager.service.port }}/{{ trimPrefix "/" .Values.alertmanager.alertmanagerSpec.routePrefix }}
+        editable: false
+        jsonData:
+          handleGrafanaManagedAlerts: false
+          implementation: prometheus
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        isDefault: false
+        editable: false
+        jsonData:
+          maxLines: 1000
+
+  # --- Prometheus ---
+  prometheus:
+    prometheusSpec:
+      # Retention
+      retention: 15d
+      retentionSize: 10GB
+
+      # kube-prometheus-stack defaults these via the operator; if we omit them, the live
+      # Prometheus CR gets defaulted fields that Argo CD then reports as OutOfSync.
+      scrapeInterval: 30s
+      evaluationInterval: 30s
+
+      # Explicitly match the operator's default selector so Git matches cluster state.
+      ruleSelector:
+        matchLabels:
+          release: monitoring
+
+      # Storage: Prometheus TSDB requires reliable POSIX file locks — NFS often breaks with
+      # "lock DB directory: resource temporarily unavailable" and Grafana then has no metrics.
+      # Use local-path (node disk); keep Grafana/Loki on NFS if you prefer.
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path-homelab
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 20Gi
+
+      # Resource limits
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+
+      # Scrape all namespaces
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      # Pick up PrometheusRules from all namespaces (not just the monitoring namespace).
+      # `ruleSelector` above matches the kube-prometheus-stack default so Argo CD doesn't fight
+      # operator defaults on the live Prometheus CR.
+      ruleSelectorNilUsesHelmValues: false
+      ruleNamespaceSelectorNilUsesHelmValues: false
+
+  # --- Alertmanager ---
+  alertmanager:
+    enabled: true
+    alertmanagerSpec:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+  # --- Node Exporter ---
+  nodeExporter:
+    enabled: true
+
+  # --- kube-state-metrics ---
+  kubeStateMetrics:
+    enabled: true

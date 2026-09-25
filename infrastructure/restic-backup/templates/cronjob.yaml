@@ -1,0 +1,88 @@
+{{- if and .Values.repoPvc.enabled .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "restic-backup.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "restic-backup.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  {{- with .Values.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            {{- include "restic-backup.labels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "restic-backup.fullname" . }}
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            - name: copy-restic
+              image: "{{ .Values.images.restic.repository }}:{{ .Values.images.restic.tag }}"
+              imagePullPolicy: {{ .Values.images.restic.pullPolicy }}
+              securityContext:
+                runAsUser: 0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  cp /usr/bin/restic /opt/restic
+                  chmod 0555 /opt/restic
+              volumeMounts:
+                - name: restic-bin
+                  mountPath: /opt
+          containers:
+            - name: backup
+              image: "{{ .Values.images.kubectl.repository }}:{{ .Values.images.kubectl.tag }}"
+              imagePullPolicy: {{ .Values.images.kubectl.pullPolicy }}
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: TARGET_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.restic.passwordSecretName }}
+              volumeMounts:
+                - name: restic-bin
+                  mountPath: /opt
+                  readOnly: true
+                - name: plex-data
+                  mountPath: {{ .Values.backup.sourceMountPath }}
+                  readOnly: true
+                - name: restic-repo
+                  mountPath: {{ .Values.restic.repositoryMountPath }}
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+          volumes:
+            - name: restic-bin
+              emptyDir: {}
+            - name: plex-data
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.dataPvcName }}
+            - name: restic-repo
+              persistentVolumeClaim:
+                claimName: {{ include "restic-backup.fullname" . }}-repo
+            - name: script
+              configMap:
+                name: {{ include "restic-backup.fullname" . }}-script
+                defaultMode: 0755
+{{- end }}

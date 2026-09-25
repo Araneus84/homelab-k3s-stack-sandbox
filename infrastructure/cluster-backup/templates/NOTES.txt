@@ -1,0 +1,12 @@
+Cluster backup CronJob writes to PVC (nfs-client) under /backup/<UTC-timestamp>/.
+
+Manual run:
+  kubectl create job --from=cronjob/{{ include "cluster-backup.fullname" . }} {{ include "cluster-backup.fullname" . }}-manual-$(date +%s) -n {{ .Values.namespace }}
+
+Inspect:
+  kubectl logs -n {{ .Values.namespace }} job/{{ include "cluster-backup.fullname" . }}-manual-... 
+
+Restore is GitOps-first: re-apply this repo + Argo. YAML dumps help re-create CRs and compare drift.
+For PVC *data* (Grafana DB, app configs on NFS), data already lives on NAS via nfs-client; this job does not duplicate those files.
+
+For full k3s etcd state, snapshot on the node:  sudo k3s etcd-snapshot save

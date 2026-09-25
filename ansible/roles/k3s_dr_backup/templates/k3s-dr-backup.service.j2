@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Homelab k3s DR backup (DB + local-path + config to NAS)
+After=k3s.service network-online.target
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/k3s-dr-backup.sh

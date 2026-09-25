@@ -1,0 +1,6 @@
+# Optional header widgets (edit /app/config/widgets.yaml on the Homepage PVC).
+# Service widgets (Plex, qBittorrent, Sonarr) are configured via Ingress annotations in this repo.
+
+- search:
+    provider: duckduckgo
+    target: _blank

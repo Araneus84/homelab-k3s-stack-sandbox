@@ -1,0 +1,13 @@
+# Values for sealed-secrets Helm chart (bitnami-labs/sealed-secrets).
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring

@@ -1,0 +1,73 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for repos under a GitHub Organization (free key: https://gitleaks.io)
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible + Collections
+        run: |
+          pip install ansible ansible-lint
+          ansible-galaxy collection install ansible.posix community.general
+
+      - name: Run Ansible Lint
+        run: ansible-lint ansible/roles
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.11.1
+
+      - name: Add Helm repos (dependencies)
+        run: |
+          set -euo pipefail
+          helm repo add argo-helm https://argoproj.github.io/argo-helm || true
+          helm repo add grafana-helm-charts https://grafana.github.io/helm-charts || true
+          helm repo add vmware-tanzu-helm-charts https://vmware-tanzu.github.io/helm-charts || true
+          helm repo add jetstack https://charts.jetstack.io || true
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+          helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner || true
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+          helm repo update
+
+      - name: Lint Helm Charts
+        run: |
+          # Lint all charts
+          for chart in $(find apps -name Chart.yaml -print); do
+            chart_dir=$(dirname "$chart")
+            echo "=== Helm lint $chart_dir ==="
+            helm dependency build "$chart_dir"
+            helm lint $chart_dir
+          done
+
+          for chart in $(find infrastructure -name Chart.yaml -print); do
+            chart_dir=$(dirname "$chart")
+            echo "=== Helm lint $chart_dir ==="
+            helm dependency build "$chart_dir"
+            helm lint $chart_dir
+          done

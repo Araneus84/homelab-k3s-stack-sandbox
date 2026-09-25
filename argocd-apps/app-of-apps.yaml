@@ -1,0 +1,36 @@
+---
+# ==============================================================================
+# App of Apps - Root Application
+# ==============================================================================
+# This is the bootstrap Application that manages all other ArgoCD Applications.
+# Apply this once after ArgoCD is installed:
+#   kubectl apply -f argocd-apps/app-of-apps.yaml
+#
+# ArgoCD will then discover and sync all Application CRs in this directory,
+# which in turn deploy all infrastructure and app Helm charts.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Araneus84/homelab-k3s-stack.git  
+    targetRevision: main
+    path: argocd-apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true

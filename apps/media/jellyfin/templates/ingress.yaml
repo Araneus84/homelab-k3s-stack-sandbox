@@ -1,0 +1,42 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "jellyfin.fullname" . }}
+  labels:
+    {{- include "jellyfin.labels" . | nindent 4 }}
+  {{- $extra := .Values.ingress.annotations | default dict }}
+  {{- if or .Values.homepageDiscovery.enabled .Values.homepageWidget.enabled $extra }}
+  annotations:
+  {{- if .Values.homepageDiscovery.enabled }}
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: {{ .Values.homepageDiscovery.name | quote }}
+    gethomepage.dev/group: {{ .Values.homepageDiscovery.group | quote }}
+  {{- with .Values.homepageDiscovery.icon }}
+    gethomepage.dev/icon: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.homepageWidget.enabled }}
+    gethomepage.dev/widget.type: jellyfin
+    gethomepage.dev/widget.url: {{ include "jellyfin.internalURL" . | quote }}
+    gethomepage.dev/widget.key: {{ print "{{HOMEPAGE_VAR_JELLYFIN_KEY}}" | quote }}
+    gethomepage.dev/widget.fields: {{ .Values.homepageWidget.fields | toJson | quote }}
+  {{- end }}
+  {{- if $extra }}
+    {{- toYaml $extra | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "jellyfin.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

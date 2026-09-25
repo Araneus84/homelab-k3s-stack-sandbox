@@ -1,0 +1,131 @@
+---
+# ==============================================================================
+# Role: maintenance - Ongoing system maintenance
+# ==============================================================================
+
+# --- System Updates ---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install security updates only
+  ansible.builtin.apt:
+    upgrade: safe
+    autoremove: true
+    autoclean: true
+
+# --- Unattended Upgrades ---
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+
+- name: Enable unattended-upgrades for security patches
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    mode: "0644"
+
+# --- Log Rotation ---
+- name: Configure k3s log rotation
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/k3s
+    content: |
+      /var/log/syslog {
+        rotate 7
+        daily
+        missingok
+        notifempty
+        compress
+        delaycompress
+      }
+    mode: "0644"
+
+# --- NFS Health Check ---
+- name: Verify NFS mounts are still accessible
+  ansible.builtin.command: "mountpoint -q {{ nfs_mount_point }}"
+  register: maintenance_nfs_mount_check
+  changed_when: false
+  failed_when: false
+
+- name: Remount NFS if needed
+  ansible.posix.mount:
+    path: "{{ nfs_mount_point }}"
+    src: "{{ nfs_server }}:{{ nfs_base_export }}"
+    fstype: nfs
+    opts: "{{ nfs_mount_opts }}"
+    state: mounted
+  when: maintenance_nfs_mount_check.rc != 0
+
+# --- k3s Service Health ---
+- name: Verify k3s service is running
+  ansible.builtin.systemd:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Check k3s node status
+  ansible.builtin.command: k3s kubectl get nodes
+  register: maintenance_node_status
+  changed_when: false
+
+- name: Warn if node is not Ready
+  ansible.builtin.debug:
+    msg: "WARNING: Node may not be ready. Status: {{ maintenance_node_status.stdout }}"
+  when: "'NotReady' in maintenance_node_status.stdout"
+
+# --- Disk Space Check ---
+- name: Check disk space
+  ansible.builtin.command: df -h /
+  register: maintenance_disk_space
+  changed_when: false
+
+- name: Display disk usage
+  ansible.builtin.debug:
+    msg: "{{ maintenance_disk_space.stdout_lines }}"
+
+# --- Clean up old container images ---
+- name: Prune unused container images (k3s crictl)
+  ansible.builtin.command: k3s crictl rmi --prune
+  register: maintenance_crictl_prune
+  changed_when: ( (maintenance_crictl_prune.stdout | default('')) ~ (maintenance_crictl_prune.stderr | default('')) ) is search('(?i)delete|remove|pruned')
+  failed_when: false
+
+- name: Install systemd units for scheduled image prune
+  when: maintenance_image_prune_timer_enabled | bool
+  block:
+    - name: Deploy k3s-image-prune.service
+      ansible.builtin.template:
+        src: k3s-image-prune.service.j2
+        dest: /etc/systemd/system/k3s-image-prune.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Deploy k3s-image-prune.timer
+      ansible.builtin.template:
+        src: k3s-image-prune.timer.j2
+        dest: /etc/systemd/system/k3s-image-prune.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable and start k3s image prune timer
+      ansible.builtin.systemd:
+        name: k3s-image-prune.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+- name: Disable k3s image prune timer (when not wanted)
+  when: not (maintenance_image_prune_timer_enabled | bool)
+  ansible.builtin.systemd:
+    name: k3s-image-prune.timer
+    enabled: false
+    state: stopped
+  failed_when: false

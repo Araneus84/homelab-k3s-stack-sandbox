@@ -1,0 +1,65 @@
+replicaCount: 1
+
+image:
+  repository: vaultwarden/server
+  tag: "1.32.7"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  WEB_VAULT_ENABLED: "true"
+  ROCKET_PORT: "8070"
+  DOMAIN: "https://vaultwarden.home"
+
+adminToken:
+  existingSecret: vaultwarden-admin
+  key: admin-token
+
+sealedSecret:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 8070
+
+homepageDiscovery:
+  enabled: true
+  name: Vaultwarden
+  group: Security
+  icon: si-vaultwarden
+
+ingress:
+  enabled: true
+  className: nginx
+  host: vaultwarden.home
+  annotations: {}
+
+persistence:
+  data:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 5Gi
+    accessMode: ReadWriteOnce
+    mountPath: /data
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# securityContext: hardened — safe and intentional for vaultwarden/server.
+# The Vaultwarden image runs as a dedicated non-root user (UID 1000) natively — no root init,
+# no s6-overlay, no capability requirements. readOnlyRootFilesystem: true is safe because
+# all writable state goes to /data (the PVC mount). runAsNonRoot: true adds an admission-level
+# enforcement gate that prevents the container from running as root even if the image were
+# replaced with one that overrides the user.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  readOnlyRootFilesystem: true

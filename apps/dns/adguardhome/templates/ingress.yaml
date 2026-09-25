@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "adguardhome.fullname" . }}
+  labels:
+    {{- include "adguardhome.labels" . | nindent 4 }}
+  {{- $extra := .Values.ingress.annotations | default dict }}
+  {{- if or .Values.homepageDiscovery.enabled $extra }}
+  annotations:
+  {{- if .Values.homepageDiscovery.enabled }}
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: {{ .Values.homepageDiscovery.name | quote }}
+    gethomepage.dev/group: {{ .Values.homepageDiscovery.group | quote }}
+  {{- with .Values.homepageDiscovery.icon }}
+    gethomepage.dev/icon: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if $extra }}
+    {{- toYaml $extra | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "adguardhome.fullname" . }}-web
+                port:
+                  number: {{ .Values.service.web.port }}
+{{- end }}

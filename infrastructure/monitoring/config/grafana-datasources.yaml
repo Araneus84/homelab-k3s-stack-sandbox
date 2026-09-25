@@ -1,0 +1,41 @@
+# Grafana datasource provisioning (reference only — do not kubectl apply).
+# Source of truth: ../values.yaml → kube-prometheus-stack.grafana.additionalDataSources
+#
+# Example resolved URLs when Argo CD deploys this chart as release `monitoring` in
+# namespace `monitoring`, and Loki listens at `loki.monitoring.svc.cluster.local:3100`.
+# No credentials: Grafana uses access: proxy to reach in-cluster HTTP.
+# If you rename the release or Loki, change values.yaml and refresh this file from
+# `helm template` (datasource.yaml inside the grafana-datasource ConfigMap).
+
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+
+  - name: Alertmanager
+    type: alertmanager
+    uid: alertmanager
+    access: proxy
+    url: http://monitoring-kube-prometheus-alertmanager.monitoring.svc:9093/
+    editable: false
+    jsonData:
+      handleGrafanaManagedAlerts: false
+      implementation: prometheus
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki.monitoring.svc.cluster.local:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000

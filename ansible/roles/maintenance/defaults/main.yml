@@ -1,0 +1,5 @@
+---
+# Weekly prune of unused images on k3s nodes (containerd via crictl).
+maintenance_image_prune_timer_enabled: true
+# systemd OnCalendar syntax; default Sunday 04:00 local time.
+maintenance_image_prune_on_calendar: "Sun *-*-* 04:00:00"

@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Prune unused container images (k3s / containerd)
+After=k3s.service
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/k3s crictl rmi --prune

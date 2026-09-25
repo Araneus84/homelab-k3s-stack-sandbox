@@ -1,0 +1,49 @@
+replicaCount: 1
+
+# Stremio derives its advertised base URL from its network interface. Bind it to
+# the node network so desktop clients receive the LAN address, not a pod CIDR IP.
+hostNetwork: true
+
+# Pin an explicit upstream release; update through Renovate/a deliberate Git change.
+image:
+  repository: stremio/server
+  tag: "v4.21.0"
+  pullPolicy: IfNotPresent
+
+# The desktop client runs from a different LAN origin. The upstream image rejects
+# that connection unless CORS checks are explicitly disabled.
+env:
+  NO_CORS: "1"
+
+# The server binds port 11470 directly on the single-node LAN address.
+# Clients use http://192.168.50.100:11470.
+# No ServiceLB port reservation is needed.
+service:
+  type: ClusterIP
+  port: 11470
+
+# The upstream image declares /root/.stremio-server as its persistent application
+# directory. Persisting it preserves server settings and its disposable stream cache.
+persistence:
+  enabled: true
+  storageClass: local-path-homelab
+  size: 100Gi
+  accessMode: ReadWriteOnce
+  mountPath: /root/.stremio-server
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+strategy:
+  type: Recreate
+
+# Leave empty for the current single-node K3s cluster (192.168.50.100).
+# If nodes are added, set a stable node label here to keep the local PVC and
+# K3s LoadBalancer endpoint on the intended homelab node.
+nodeSelector: {}
+tolerations: []

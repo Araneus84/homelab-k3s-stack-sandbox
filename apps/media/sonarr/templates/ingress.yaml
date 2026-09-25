@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sonarr.fullname" . }}
+  labels:
+    {{- include "sonarr.labels" . | nindent 4 }}
+  {{- $extra := .Values.ingress.annotations | default dict }}
+  {{- if or .Values.homepageDiscovery.enabled $extra .Values.homepageWidget.enabled }}
+  annotations:
+  {{- if .Values.homepageDiscovery.enabled }}
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: {{ .Values.homepageDiscovery.name | quote }}
+    gethomepage.dev/group: {{ .Values.homepageDiscovery.group | quote }}
+  {{- with .Values.homepageDiscovery.icon }}
+    gethomepage.dev/icon: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.homepageWidget.enabled }}
+    gethomepage.dev/widget.type: sonarr
+    gethomepage.dev/widget.url: {{ include "sonarr.homepageInternalURL" . | quote }}
+    gethomepage.dev/widget.key: {{ print "{{HOMEPAGE_VAR_SONARR_API_KEY}}" | quote }}
+  {{- end }}
+  {{- if $extra }}
+    {{- toYaml $extra | nindent 4 }}
+  {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sonarr.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

@@ -1,0 +1,138 @@
+# Wrapper chart: upstream argo/argocd-image-updater (operator v1.x) + homelab ImageUpdater CR.
+
+# --- Homelab: all Argo CD Application names under argocd-apps/apps/ (workload charts) ---
+homelabImageUpdater:
+  enabled: true
+
+  # argocd = patches each Application's Helm parameters in-cluster (no git push; no extra secrets).
+  # git    = commits tag bumps into values.yaml; requires push credentials (PAT/SSH) for the repo.
+  #          Set method: git, fill git.branch/repository, then set argocd-image-updater.config.git.user
+  #          and config.git.email below, and add a write-capable repo credential (chart extraVolumes / Argo CD).
+  writeBack:
+    method: argocd
+    git:
+      branch: main
+      repository: https://github.com/Araneus84/homelab-k3s-stack.git
+
+  # One entry per Application metadata.name — matches path apps/**/values.yaml for git write-back.
+  workloads:
+    - namePattern: homepage
+      valuesPath: apps/dashboard/homepage/values.yaml
+      images:
+        - alias: homepage
+          imageName: ghcr.io/gethomepage/homepage:^1.7
+          updateStrategy: semver
+          allowTags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+
+
+    # *arr + qBittorrent (linuxserver): :latest + digest when the tag moves (see adguardhome).
+    - namePattern: sonarr
+      valuesPath: apps/media/sonarr/values.yaml
+      images:
+        - alias: sonarr
+          imageName: lscr.io/linuxserver/sonarr:latest
+          updateStrategy: digest
+
+    - namePattern: radarr
+      valuesPath: apps/media/radarr/values.yaml
+      images:
+        - alias: radarr
+          imageName: lscr.io/linuxserver/radarr:latest
+          updateStrategy: digest
+
+    - namePattern: prowlarr
+      valuesPath: apps/media/prowlarr/values.yaml
+      images:
+        - alias: prowlarr
+          imageName: lscr.io/linuxserver/prowlarr:latest
+          updateStrategy: digest
+
+    - namePattern: qbittorrent
+      valuesPath: apps/media/qbittorrent/values.yaml
+      images:
+        - alias: qbittorrent
+          imageName: lscr.io/linuxserver/qbittorrent:latest
+          updateStrategy: digest
+
+    # Plex: version bumps via Renovate PRs to apps/media/plex/values.yaml (no in-cluster image overrides).
+
+    # Stay on 1.33.x patch line only — minor bumps (e.g. 1.35) have broken this stack before.
+    - namePattern: overseerr
+      valuesPath: apps/media/overseerr/values.yaml
+      images:
+        - alias: overseerr
+          imageName: sctx/overseerr:~1.33.2
+          updateStrategy: semver
+          allowTags: regexp:^1\.33\.[0-9]+$
+
+    - namePattern: autobrr
+      valuesPath: apps/media/autobrr/values.yaml
+      images:
+        - alias: autobrr
+          imageName: ghcr.io/autobrr/autobrr:^1.75
+          updateStrategy: semver
+          allowTags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+
+
+    - namePattern: flaresolverr
+      valuesPath: apps/media/flaresolverr/values.yaml
+      images:
+        - alias: flaresolverr
+          imageName: ghcr.io/flaresolverr/flaresolverr:^3.3
+          updateStrategy: semver
+          allowTags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+
+
+    - namePattern: pihole
+      valuesPath: apps/dns/pihole/values.yaml
+      images:
+        - alias: pihole
+          imageName: pihole/pihole:2024.07.0
+          updateStrategy: newest-build
+          allowTags: regexp:^20[0-9]{2}\.[0-9]{2}\.[0-9]+
+
+    - namePattern: adguardhome
+      valuesPath: apps/dns/adguardhome/values.yaml
+      images:
+        - alias: adguardhome
+          imageName: adguard/adguardhome:latest
+          updateStrategy: digest
+
+    - namePattern: vaultwarden
+      valuesPath: apps/security/vaultwarden/values.yaml
+      images:
+        - alias: vaultwarden
+          imageName: vaultwarden/server:^1.32
+          updateStrategy: semver
+
+    - namePattern: homeassistant
+      valuesPath: apps/home-automation/homeassistant/values.yaml
+      images:
+        - alias: homeassistant
+          imageName: homeassistant/home-assistant:2024.12.5
+          updateStrategy: newest-build
+          allowTags: regexp:^20[0-9]{2}\.[0-9]+\.[0-9]+
+
+argocd-image-updater:
+  replicaCount: 1
+  createClusterRoles: true
+  rbac:
+    enabled: true
+
+  tolerations:
+    - operator: Exists
+
+  extraArgs:
+    - --interval
+    - 24h
+
+  config:
+    argocd.namespace: argocd
+    log.level: info
+    # Optional: pin Docker Hub / GHCR creds if you hit rate limits (see chart docs: config.registries).
+    registries: []
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

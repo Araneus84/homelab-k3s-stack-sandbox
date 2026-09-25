@@ -1,0 +1,20 @@
+---
+# Copy this file to hosts.yml and update with your actual values:
+#   cp hosts.yml.example hosts.yml
+#
+# IMPORTANT: hosts.yml is gitignored -- never commit real IPs/credentials
+all:
+  hosts:
+    homelab:
+      ansible_host: "192.168.1.10"           # <-- Your homelab IP (example subnet; use yours)
+      ansible_user: "alex"                     # <-- Your SSH username
+      ansible_ssh_private_key_file: "~/.ssh/homelab_key"
+      ssh_public_key: "ssh-ed25519 AAAA..."    # <-- Your public key to authorize
+      ansible_python_interpreter: /usr/bin/python3
+  vars:
+    # Optional: Override global variables here if needed
+    # nfs_server: "192.168.1.11"     # <-- Your NAS IP
+  children:
+    k3s_servers:
+      hosts:
+        homelab:

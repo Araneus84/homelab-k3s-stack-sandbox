@@ -1,0 +1,41 @@
+#!/bin/bash
+# {{ ansible_managed }}
+set -euo pipefail
+DEST="{{ nfs_mount_point }}/{{ k3s_dr_backup_dest_dir }}"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+HIST_DAYS="{{ k3s_dr_backup_history_days }}"
+
+log() { echo "[k3s-dr-backup] $*"; }
+
+if ! mountpoint -q "{{ nfs_mount_point }}"; then
+  log "ERROR: NFS not mounted at {{ nfs_mount_point }}"
+  exit 1
+fi
+
+mkdir -p "${DEST}/history/${TS}" "${DEST}/current"
+
+# Optional: refreshes snapshots inside server/db when using embedded etcd.
+log "etcd-snapshot (ignored if SQLite / non-etcd backend)"
+k3s etcd-snapshot save --name "dr-${TS}" 2>/dev/null || log "snapshot save skipped (normal on some k3s builds)"
+
+log "history copy: server/db -> history/${TS}/server-db"
+rsync -a /var/lib/rancher/k3s/server/db/ "${DEST}/history/${TS}/server-db/"
+
+log "mirror: server/db -> current/server-db"
+rsync -a --delete /var/lib/rancher/k3s/server/db/ "${DEST}/current/server-db/"
+
+log "mirror: local-path PVC data -> current/storage"
+rsync -a --delete /var/lib/rancher/k3s/storage/ "${DEST}/current/storage/"
+
+log "copy: /etc/rancher/k3s -> current/etc-rancher-k3s"
+rsync -a /etc/rancher/k3s/ "${DEST}/current/etc-rancher-k3s/"
+
+if [[ "${HIST_DAYS}" =~ ^[0-9]+$ ]] && [[ "${HIST_DAYS}" -gt 0 ]]; then
+  find "${DEST}/history" -mindepth 1 -maxdepth 1 -type d -mtime "+${HIST_DAYS}" -print | while read -r d; do
+    log "prune old history: ${d}"
+    rm -rf "${d}"
+  done
+fi
+
+log "done. Restore hints: docs/disaster-recovery.md"
+du -sh "${DEST}/current" || true

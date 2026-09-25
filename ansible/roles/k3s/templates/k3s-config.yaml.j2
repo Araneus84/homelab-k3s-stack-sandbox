@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+# k3s server configuration
+# Docs: https://docs.k3s.io/installation/configuration
+
+write-kubeconfig-mode: "0644"
+node-name: "{{ hostname }}"
+tls-san:
+  - "{{ ansible_host }}"
+  - "{{ hostname }}"
+  - "{{ hostname }}.local"
+
+{% for component in k3s_disable_components %}
+disable:
+  - {{ component }}
+{% endfor %}
+
+# Kubelet args for NFS support
+kubelet-arg:
+  - "feature-gates=GracefulNodeShutdown=true"
+
+# Protect control plane
+protect-kernel-defaults: false

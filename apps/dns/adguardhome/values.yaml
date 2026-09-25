@@ -1,0 +1,63 @@
+# AdGuard Home DNS filtering configuration
+replicaCount: 1
+
+image:
+  repository: adguard/adguardhome
+  # Use the image default tag (latest) unless you pin it later.
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  dns:
+    type: ClusterIP
+    port: 53
+  web:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+
+homepageDiscovery:
+  enabled: true
+  name: AdGuard Home
+  group: DNS
+  icon: si-adguard
+
+ingress:
+  enabled: true
+  className: nginx
+  host: adguard.home
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+
+env:
+  # Keep container logs/debug consistent.
+  TZ: "Asia/Jerusalem"
+
+persistence:
+  conf:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  work:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 1Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+
+# securityContext: intentionally omitted.
+# adguard/adguardhome runs as root to bind port 53 on the host network (hostNetwork: true).
+# The init container uses the same image and must write to a PVC-backed /opt/adguardhome/conf
+# directory on first boot. Restricting to runAsNonRoot breaks port binding and config seeding.
+# securityContext: {}  # uncomment only if using a custom hardened AdGuard build

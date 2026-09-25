@@ -1,0 +1,111 @@
+# Historical reference only: Docker Compose stack before migration to k3s/Helm/Argo CD.
+# Not maintained. Do not use WEBPASSWORD or other placeholders as-is.
+version: "3.8"
+
+services:
+  # --- DNS ---
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    environment:
+      TZ: 'Asia/Jerusalem'
+      WEBPASSWORD: 'CHANGE_ME_SECURELY'
+    volumes:
+      - './etc-pihole:/etc/pihole'
+      - './etc-dnsmasq.d:/etc/dnsmasq.d'
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8080:80/tcp"
+    restart: unless-stopped
+
+  # --- Media ---
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    network_mode: host
+    environment:
+      TZ: 'Asia/Jerusalem'
+      PLEX_CLAIM: ''
+    volumes:
+      - './config/plex:/config'
+      - '/mnt/nas/media:/media' # Simulate NAS mount
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: 'Asia/Jerusalem'
+    volumes:
+      - './config/sonarr:/config'
+      - '/mnt/nas/media:/media'
+    ports:
+      - "8989:8989"
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: 'Asia/Jerusalem'
+    volumes:
+      - './config/radarr:/config'
+      - '/mnt/nas/media:/media'
+    ports:
+      - "7878:7878"
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: 'Asia/Jerusalem'
+    volumes:
+      - './config/prowlarr:/config'
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: 'Asia/Jerusalem'
+      WEBUI_PORT: 8080
+    volumes:
+      - './config/qbittorrent:/config'
+      - '/mnt/nas/downloads:/downloads'
+    ports:
+      - "8181:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+
+  # --- Home Automation ---
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./config/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    network_mode: host
+
+  # --- Security ---
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    volumes:
+      - ./config/vaultwarden:/data
+    ports:
+      - "8282:80"
+    restart: unless-stopped

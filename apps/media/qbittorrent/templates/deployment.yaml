@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qbittorrent.fullname" . }}
+  labels:
+    {{- include "qbittorrent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "qbittorrent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "qbittorrent.selectorLabels" . | nindent 8 }}
+    spec:
+      # securityContext omitted at pod level: lscr.io/linuxserver/qbittorrent uses s6-overlay which
+      # requires the process to start as root (UID 0) so that s6 can apply PUID/PGID ownership
+      # fixes before dropping privileges to the `abc` user. Setting runAsUser: 1000 here conflicts
+      # with s6-overlay init and causes the container to crash on startup. UID/GID are controlled
+      # instead via PUID and PGID environment variables, which s6 applies correctly.
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PUID
+              value: {{ .Values.env.PUID | quote }}
+            - name: PGID
+              value: {{ .Values.env.PGID | quote }}
+            - name: TZ
+              value: {{ .Values.env.TZ | quote }}
+          ports:
+            - name: web
+              containerPort: {{ .Values.service.web.port }}
+              protocol: TCP
+            - name: bittorrent-tcp
+              containerPort: {{ .Values.service.bittorrent.port }}
+              protocol: TCP
+            - name: bittorrent-udp
+              containerPort: {{ .Values.service.bittorrent.port }}
+              protocol: UDP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: {{ .Values.nfs.downloads.mountPath }}
+            {{- if .Values.nfs.downloads.aliasMountPath }}
+            - name: downloads
+              mountPath: {{ .Values.nfs.downloads.aliasMountPath }}
+            {{- end }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "qbittorrent.fullname" . }}-config
+        - name: downloads
+          nfs:
+            server: {{ .Values.nfs.downloads.server }}
+            path: {{ .Values.nfs.downloads.path }}

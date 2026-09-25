@@ -1,0 +1,34 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "homeassistant.fullname" . }}
+  labels:
+    {{- include "homeassistant.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/websocket-services: {{ include "homeassistant.fullname" . | quote }}
+  {{- if .Values.homepageDiscovery.enabled }}
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: {{ .Values.homepageDiscovery.name | quote }}
+    gethomepage.dev/group: {{ .Values.homepageDiscovery.group | quote }}
+  {{- with .Values.homepageDiscovery.icon }}
+    gethomepage.dev/icon: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "homeassistant.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

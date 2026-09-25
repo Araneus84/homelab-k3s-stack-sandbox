@@ -1,0 +1,10 @@
+apiVersion: v2
+name: stremio-server
+description: Stremio streaming server for the homelab
+version: 0.1.0
+appVersion: "4.21.0"
+type: application
+keywords:
+  - media
+  - stremio
+  - streaming

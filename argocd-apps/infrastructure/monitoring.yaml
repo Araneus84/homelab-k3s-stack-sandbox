@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Araneus84/homelab-k3s-stack.git
+    targetRevision: main
+    path: infrastructure/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: monitoring-kube-prometheus-grafana-datasource
+      namespace: monitoring
+      jsonPointers:
+        - /data
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
+      name: homelab-alerts
+      namespace: monitoring
+      jqPathExpressions:
+        - .metadata.annotations."prometheus-operator-validated"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # SSA + kube-prometheus-stack Helm hooks → stuck on admission-create Job (Argo CD).
+      - SkipHooks=true
+      - ServerSideApply=true

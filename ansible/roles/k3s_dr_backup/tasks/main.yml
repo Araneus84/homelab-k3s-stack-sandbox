@@ -1,0 +1,47 @@
+---
+# ==============================================================================
+# Role: k3s_dr_backup — crash-plan files to NAS (see docs/disaster-recovery.md)
+# ==============================================================================
+
+- name: Install k3s DR backup script
+  when: k3s_dr_backup_enabled | bool
+  ansible.builtin.template:
+    src: k3s-dr-backup.sh.j2
+    dest: /usr/local/sbin/k3s-dr-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install systemd units for k3s DR backup
+  when: k3s_dr_backup_enabled | bool
+  block:
+    - name: Deploy k3s-dr-backup.service
+      ansible.builtin.template:
+        src: k3s-dr-backup.service.j2
+        dest: /etc/systemd/system/k3s-dr-backup.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Deploy k3s-dr-backup.timer
+      ansible.builtin.template:
+        src: k3s-dr-backup.timer.j2
+        dest: /etc/systemd/system/k3s-dr-backup.timer
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable and start k3s DR backup timer
+      ansible.builtin.systemd:
+        name: k3s-dr-backup.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+- name: Disable k3s DR backup timer
+  when: not (k3s_dr_backup_enabled | bool)
+  ansible.builtin.systemd:
+    name: k3s-dr-backup.timer
+    enabled: false
+    state: stopped
+  failed_when: false

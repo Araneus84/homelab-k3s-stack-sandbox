@@ -1,0 +1,32 @@
+{{- if .Values.persistence.conf.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "adguardhome.fullname" . }}-conf
+  labels:
+    {{- include "adguardhome.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.conf.accessMode }}
+  storageClassName: {{ .Values.persistence.conf.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.conf.size }}
+---
+{{- end }}
+
+{{- if .Values.persistence.work.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "adguardhome.fullname" . }}-work
+  labels:
+    {{- include "adguardhome.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.work.accessMode }}
+  storageClassName: {{ .Values.persistence.work.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.work.size }}
+{{- end }}

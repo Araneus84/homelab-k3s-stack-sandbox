@@ -1,0 +1,94 @@
+---
+# ==============================================================================
+# Role: security - SSH hardening, firewall, fail2ban
+# ==============================================================================
+
+# --- SSH Hardening ---
+- name: Deploy hardened sshd_config
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+    validate: "sshd -t -f %s"
+  notify: restart sshd
+
+- name: Ensure SSH key directory exists for primary user
+  ansible.builtin.file:
+    path: "/home/{{ primary_user }}/.ssh"
+    state: directory
+    owner: "{{ primary_user }}"
+    group: "{{ primary_user }}"
+    mode: "0700"
+
+- name: Add authorized key for primary user
+  ansible.posix.authorized_key:
+    user: "{{ primary_user }}"
+    state: present
+    key: "{{ ssh_public_key }}"
+  when: ssh_public_key is defined
+
+# --- Firewall (UFW) ---
+- name: Install UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+- name: Reset UFW to defaults
+  community.general.ufw:
+    state: reset
+
+- name: Set UFW default deny incoming
+  community.general.ufw:
+    direction: incoming
+    default: deny
+
+- name: Set UFW default allow outgoing
+  community.general.ufw:
+    direction: outgoing
+    default: allow
+
+- name: Allow configured firewall ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port | string }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ firewall_allowed_ports }}"
+
+- name: Allow traffic from local network (k8s pod/service CIDR)
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    comment: "k8s internal traffic"
+  loop:
+    - 10.42.0.0/16   # k3s pod CIDR
+    - 10.43.0.0/16   # k3s service CIDR
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+    logging: "on"
+  notify: restart ufw
+
+# --- fail2ban ---
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+
+- name: Deploy fail2ban jail configuration
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started

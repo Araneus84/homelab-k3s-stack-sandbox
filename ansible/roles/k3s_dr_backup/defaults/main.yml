@@ -1,0 +1,10 @@
+---
+# Node-level crash-plan backup to NAS (etcd/SQLite + local-path PVCs + k3s config).
+# Requires NFS mounted at nfs_mount_point (see inventory group_vars).
+k3s_dr_backup_enabled: true
+# Subdirectory on the NFS mount (created automatically).
+k3s_dr_backup_dest_dir: homelab-k3s-dr-backup
+# systemd OnCalendar — daily after midnight, before cluster-backup CronJob.
+k3s_dr_backup_on_calendar: "*-*-* 02:15:00"
+# Point-in-time copies of server/db (small); pruned by age.
+k3s_dr_backup_history_days: 7

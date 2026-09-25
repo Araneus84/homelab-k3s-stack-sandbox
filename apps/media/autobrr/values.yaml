@@ -1,0 +1,54 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/autobrr/autobrr
+  tag: "v1.75.1"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+env:
+  TZ: "Asia/Jerusalem"
+
+service:
+  type: ClusterIP
+  port: 7474
+
+homepageDiscovery:
+  enabled: true
+  name: Autobrr
+  group: Media
+  icon: autobrr
+
+ingress:
+  enabled: true
+  className: nginx
+  host: autobrr.home
+  annotations: {}
+
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+strategy:
+  type: Recreate
+
+# ghcr.io/autobrr/autobrr runs natively as a non-root user (UID 1000) — no root init.
+# These settings are safe and harden the container appropriately.
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000

@@ -1,0 +1,86 @@
+replicaCount: 1
+
+# Pin explicit tags — floating "latest" + DB changes can corrupt the library index.
+# Update via Renovate PRs only.
+image:
+  repository: jellyfin/jellyfin
+  tag: "10.9.11"
+  pullPolicy: IfNotPresent
+
+env:
+  TZ: "Asia/Jerusalem"
+  JELLYFIN_PublishedServerUrl: "https://jellyfin.home"
+
+service:
+  type: ClusterIP
+  port: 8096
+
+ingress:
+  enabled: true
+  className: nginx
+  host: jellyfin.home
+  annotations: {}
+
+homepageDiscovery:
+  enabled: true
+  name: Jellyfin
+  group: Media
+  icon: jellyfin
+
+# Homepage widget — requires an API key generated in Jellyfin → Dashboard → API Keys.
+# Store the key in a sealed secret and reference it via HOMEPAGE_VAR_JELLYFIN_KEY.
+homepageWidget:
+  enabled: true
+  fields:
+    - movies
+    - tvshows
+    - episodes
+
+# Persistent storage for Jellyfin config/metadata
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 20Gi
+    accessMode: ReadWriteOnce
+  # Separate cache avoids filling the config PVC with transcoded thumbnails
+  cache:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+# NFS media — same server/path as Plex, read-only
+nfsMedia:
+  enabled: true
+  server: "192.168.50.110"
+  path: /mnt/HD/HD_a2/NAS
+  mountPath: /mnt/nas
+
+# Run as non-root — Jellyfin supports this natively (no root init like Plex)
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+
+# Hardware transcoding via Intel iGPU (VA-API).
+# Set enabled: true if your node has an Intel iGPU and the /dev/dri device is present.
+# The node must have intel-gpu-plugin or simply expose /dev/dri as a hostPath.
+hwTranscoding:
+  enabled: false
+  # device: /dev/dri  # uncomment if using a specific device path
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+
+strategy:
+  type: Recreate
+
+nodeSelector: {}
+tolerations: []

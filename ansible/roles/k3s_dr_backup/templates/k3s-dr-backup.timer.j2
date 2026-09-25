@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Daily k3s DR backup to NFS
+
+[Timer]
+OnCalendar={{ k3s_dr_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

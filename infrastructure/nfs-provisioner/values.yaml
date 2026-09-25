@@ -1,0 +1,22 @@
+nfs-subdir-external-provisioner:
+  # NFS server details -- UPDATE THESE to match your NAS
+  nfs:
+    server: "192.168.50.110"    # <-- Change to your NAS IP
+    path: /mnt/HD/HD_a2/NAS   # Base folder for all k3s PVC data
+
+
+  storageClass:
+    name: nfs-client
+    defaultClass: true
+    reclaimPolicy: Retain     # Keep data on PV deletion
+    archiveOnDelete: true     # Move data to archived-* on delete
+    pathPattern: "homelab_k3s_stack/${.PVC.namespace}/${.PVC.name}"
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

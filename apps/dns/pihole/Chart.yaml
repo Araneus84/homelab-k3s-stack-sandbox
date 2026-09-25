@@ -1,0 +1,10 @@
+apiVersion: v2
+name: pihole
+description: Pi-hole DNS sinkhole for network-wide ad blocking
+version: 1.0.0
+appVersion: "2024.07.0"
+type: application
+keywords:
+  - dns
+  - adblock
+  - pihole

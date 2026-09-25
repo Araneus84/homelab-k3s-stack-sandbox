@@ -1,0 +1,42 @@
+# {{ ansible_managed }}
+# Hardened SSH configuration for homelab
+
+Port {{ ssh_port }}
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# Authentication
+PermitRootLogin {{ ssh_permit_root_login }}
+PasswordAuthentication {{ ssh_password_authentication }}
+PubkeyAuthentication yes
+MaxAuthTries {{ ssh_max_auth_tries }}
+MaxSessions 5
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Security
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+PrintMotd no
+PrintLastLog yes
+
+# Timeout
+ClientAliveInterval 300
+ClientAliveCountMax 2
+LoginGraceTime 30
+
+# Restrict users
+AllowUsers {{ ssh_allowed_users }}
+
+# Logging
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# Subsystems
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# Disable unused authentication methods
+KbdInteractiveAuthentication no
+KerberosAuthentication no
+GSSAPIAuthentication no

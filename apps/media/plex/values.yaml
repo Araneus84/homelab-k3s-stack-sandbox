@@ -1,0 +1,90 @@
+# Plex Media Server configuration
+replicaCount: 1
+
+# Stability: always pin an explicit plexinc/pms-docker tag (never "latest").
+# Floating tags + DB downgrades caused corruption and broken libraries; updates via Renovate PRs only.
+image:
+  repository: plexinc/pms-docker
+  tag: "1.43.1.10611-1e34174b1-amd64"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  # Example:
+  # pullSecrets:
+  #   - regcred
+
+# Plex requires hostNetwork for GDM (discovery) and DLNA
+hostNetwork: true
+
+# Environment
+env:
+  TZ: "Asia/Jerusalem"
+  PLEX_UID: "1000"
+  PLEX_GID: "1000"
+  # CHANGE_CONFIG_DIR_OWNERSHIP: "false"
+  # PLEX_CLAIM: ""  # Set via sealed secret for initial setup
+
+# Plex claim token -- use sealed secret for initial server setup
+# Generate at: https://www.plex.tv/claim/
+existingClaimSecret: ""
+
+service:
+  type: ClusterIP
+  port: 32400
+
+# Ingress for UI + Homepage discovery (PMS still uses hostNetwork for GDM/DLNA).
+ingress:
+  enabled: true
+  className: nginx
+  host: plex.home
+  annotations: {}
+
+homepageDiscovery:
+  enabled: true
+  name: Plex
+  group: Media
+  icon: si-plex
+
+# Active streams + library counts (not per-title “now playing”; for that use Tautulli later).
+homepageWidget:
+  enabled: true
+  fields:
+    - streams
+    - movies
+    - tv
+    - albums
+
+# Persistent storage for Plex config/metadata
+persistence:
+  config:
+    enabled: true
+    storageClass: local-path-homelab
+    size: 20Gi
+    accessMode: ReadWriteOnce
+
+# NFS media: primary mount stays at mountPath. Optional legacyMirrorPath mounts the SAME export
+# again (read-only) so older Plex library roots like /media/... keep working alongside /mnt/nas/...
+nfsMedia:
+  enabled: true
+  server: "192.168.50.110"
+  path: /mnt/HD/HD_a2/NAS
+  mountPath: /mnt/nas
+  legacyMirrorPath: "/media"
+
+# Plex is single-replica in this setup, so use vertical scaling.
+# requests = minimum guaranteed resources
+# limits   = maximum allowed resources
+resources:
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+tolerations: []
+
+# No pod securityContext: official Plex image expects root for init; hostNetwork for GDM/DLNA.
