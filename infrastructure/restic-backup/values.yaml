@@ -11,8 +11,8 @@ failedJobsHistoryLimit: 3
 # restic/restic binary is copied in from an initContainer; kubectl comes from bitnami image.
 images:
   kubectl:
-    repository: bitnami/kubectl
-    tag: "1.31.4-debian-12-r2"
+    repository: rancher/kubectl
+    tag: "v1.31.4"
     pullPolicy: IfNotPresent
   restic:
     repository: restic/restic
