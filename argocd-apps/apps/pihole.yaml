@@ -11,6 +11,14 @@ spec:
     repoURL: https://github.com/Araneus84/homelab-k3s-stack-sandbox.git
     targetRevision: main
     path: apps/dns/pihole
+    helm:
+      parameters:
+        # Real repo runs pihole at replicaCount:0 (AdGuardHome is the active DNS
+        # there; we dropped AdGuardHome from this sandbox as a resource-saving
+        # trim, not realizing it -- not pihole -- is the real one). Turn pihole
+        # on here so the sandbox has a live DNS target for the org to operate on.
+        - name: replicaCount
+          value: "1"
   destination:
     server: https://kubernetes.default.svc
     namespace: dns
