@@ -34,7 +34,7 @@ kube-prometheus-stack:
     # Persistent storage for dashboards
     persistence:
       enabled: true
-      storageClassName: nfs-client
+      storageClassName: local-path
       size: 5Gi
 
     # Your Grafana pod fails during init because NFS doesn't allow `chown`.

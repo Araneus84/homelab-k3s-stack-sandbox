@@ -19,7 +19,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/Araneus84/homelab-k3s-stack.git  
+    repoURL: https://github.com/Araneus84/homelab-k3s-stack-sandbox.git  
     targetRevision: main
     path: argocd-apps
     directory:

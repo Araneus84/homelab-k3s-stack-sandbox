@@ -42,7 +42,7 @@ ingress:
 persistence:
   config:
     enabled: true
-    storageClass: nfs-client
+    storageClass: local-path
     size: 2Gi
     accessMode: ReadWriteOnce
 

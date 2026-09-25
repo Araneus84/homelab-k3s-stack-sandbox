@@ -1,4 +1,4 @@
-# Supplemental YAML dumps to an nfs-client PVC (no raw Secrets). For full crash restore use
+# Supplemental YAML dumps to an local-path PVC (no raw Secrets). For full crash restore use
 # Ansible k3s_dr_backup + NAS mirror — see docs/disaster-recovery.md
 
 nameOverride: ""
@@ -24,7 +24,7 @@ resources:
 
 persistence:
   enabled: true
-  storageClass: nfs-client
+  storageClass: local-path
   size: 20Gi
   accessMode: ReadWriteOnce
 

@@ -6,7 +6,7 @@ nfs-subdir-external-provisioner:
 
 
   storageClass:
-    name: nfs-client
+    name: local-path
     defaultClass: true
     reclaimPolicy: Retain     # Keep data on PV deletion
     archiveOnDelete: true     # Move data to archived-* on delete
